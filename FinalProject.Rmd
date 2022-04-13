@@ -1,0 +1,41 @@
+---
+title: "Final Project"
+author: "Ethan Rosenbaum, Xinyu Zheng, and  eryl Nana Ama Akuffo-Kwapong"
+date: "4/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(tidycensus)
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(randomForest)
+library(ranger)
+library(parsnip)
+library(janitor)
+library(sf)
+theme_set(theme_minimal())
+```
+
+```{r Reading in Data}
+floodplainread <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp")
+demogdata <- get_acs(
+    geography = "tract",
+    year = 2020,
+    variables = c(bachelor = "B15003_022",
+                  poverty = "B17020_002",
+                  hhincome = "B19013_001E"),
+    state =  36,
+    county = c(005,047,051,081,085),
+    geometry = TRUE)
+
+```
+```{r Maps}
+floodplainshp <- st_sf(floodplain)
+ggplot () + 
+  geom_sf(data = floodplainshp)
+```
