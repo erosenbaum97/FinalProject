@@ -15,12 +15,12 @@ library(tidycensus)
 library(tidyverse)
 library(tidymodels)
 library(ggplot2)
+library(tigris)
 library(randomForest)
 library(ranger)
 library(parsnip)
 library(janitor)
 library(sf)
-library(rgeos)
 theme_set(theme_minimal())
 ```
 
@@ -53,7 +53,7 @@ demogdata <- get_acs(
     indian_alaska = "B02001_004",
     asian = "B02001_005",
     pacific = "B02001_006",
-    hhincome = "B19013_001E", # median household income
+    hhincome = "B19013_001", # median household income
     poverty = "B17020_002", # poverty level
     no_schooling = "B15003_002", #education attainment
     elementary_school = "B15003_009",
@@ -66,20 +66,57 @@ demogdata <- get_acs(
   ),
   state =  36,
   county = c(005,047,051,081,085),
-  geometry = TRUE, 
   key = credentia
+)
+
+geo <- tracts(
+  state = 36,
+  county = c(005,047,051,081,085)
 )
 
 ```
 
 ```{r Data cleaning}
 
+demogdata_clean <- demogdata %>%
+  select(-moe) %>%
+  pivot_wider(
+    names_from = variable,
+    values_from = estimate
+  )
+# how to deal with missing value?
+
+geo <- geo %>%
+  select(GEOID, geometry)
+
+demogdata_sf <- left_join(
+  x = demogdata_clean, 
+  y = geo
+) %>%
+  st_as_sf() %>%
+  mutate(
+    GEOID = as.numeric(GEOID),
+    county = case_when(
+      GEOID < 36047000000 ~ "Bronx",
+      GEOID < 36051000000 ~ "Kings",
+      GEOID < 36081000000 ~ "Livingston",
+      GEOID < 36085000000 ~ "Queens",
+      TRUE ~ "Richmood"
+    )
+  )
 
 ```
 
 
 ```{r Maps}
+
 floodplain %>%
   ggplot () + 
   geom_sf()
+
+demogdata_sf %>%
+  filter(county == "Kings") %>%
+  ggplot () + 
+  geom_sf(aes(fill = white), color = "white")
+
 ```
