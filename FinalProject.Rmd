@@ -1,8 +1,10 @@
 ---
 title: "Final Project"
-author: "Ethan Rosenbaum, Xinyu Zheng, and  eryl Nana Ama Akuffo-Kwapong"
+author: "Ethan Rosenbaum, Xinyu Zheng, and  Beryl Nana Ama Akuffo-Kwapong"
 date: "4/13/2022"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +15,7 @@ library(tidycensus)
 library(tidyverse)
 library(tidymodels)
 library(ggplot2)
+library(tigris)
 library(randomForest)
 library(ranger)
 library(parsnip)
@@ -22,20 +25,98 @@ theme_set(theme_minimal())
 ```
 
 ```{r Reading in Data}
-floodplainread <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp")
+# Load Sea Level Rise Maps (2050s 500-year Floodplain)
+unzip(
+  zipfile = "data/Sea Level Rise Maps (2050s 500-year Floodplain)-20220418T210520Z-001.zip",
+  exdir = "data"
+)
+floodplain <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp")
+
+# Load NYC Stormwater Flood Map - Extreme Flood
+unzip(
+  zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb-20220418T202948Z-001.zip",
+  exdir = "data"
+)
+stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood/")
+
+# Load demographic data
+credential <- Sys.getenv("census_api_key")
+
+lookup_var <- load_variables(2020, "acs5")
+
 demogdata <- get_acs(
-    geography = "tract",
-    year = 2020,
-    variables = c(bachelor = "B15003_022",
-                  poverty = "B17020_002",
-                  hhincome = "B19013_001E"),
-    state =  36,
-    county = c(005,047,051,081,085),
-    geometry = TRUE)
+  geography = "tract",
+  year = 2020,
+  variables = c(
+    white = "B02001_002", #race
+    black = "B02001_003",
+    indian_alaska = "B02001_004",
+    asian = "B02001_005",
+    pacific = "B02001_006",
+    hhincome = "B19013_001", # median household income
+    poverty = "B17020_002", # poverty level
+    no_schooling = "B15003_002", #education attainment
+    elementary_school = "B15003_009",
+    secondary_school = "B15003_012",
+    high_school = "B15003_017",
+    bachelor = "B15003_022",
+    employed = "B23025_004", # employment status
+    unemployed = "B23025_005",
+    no_in_labor_force = "23025_007"
+  ),
+  state =  36,
+  county = c(005,047,051,081,085),
+  key = credentia
+)
+
+geo <- tracts(
+  state = 36,
+  county = c(005,047,051,081,085)
+)
 
 ```
+
+```{r Data cleaning}
+
+demogdata_clean <- demogdata %>%
+  select(-moe) %>%
+  pivot_wider(
+    names_from = variable,
+    values_from = estimate
+  )
+# how to deal with missing value?
+
+geo <- geo %>%
+  select(GEOID, geometry)
+
+demogdata_sf <- left_join(
+  x = demogdata_clean, 
+  y = geo
+) %>%
+  st_as_sf() %>%
+  mutate(
+    GEOID = as.numeric(GEOID),
+    county = case_when(
+      GEOID < 36047000000 ~ "Bronx",
+      GEOID < 36051000000 ~ "Kings",
+      GEOID < 36081000000 ~ "Livingston",
+      GEOID < 36085000000 ~ "Queens",
+      TRUE ~ "Richmood"
+    )
+  )
+
+```
+
+
 ```{r Maps}
-floodplainshp <- st_sf(floodplain)
-ggplot () + 
-  geom_sf(data = floodplainshp)
+
+floodplain %>%
+  ggplot () + 
+  geom_sf()
+
+demogdata_sf %>%
+  filter(county == "Kings") %>%
+  ggplot () + 
+  geom_sf(aes(fill = white), color = "white")
+
 ```
