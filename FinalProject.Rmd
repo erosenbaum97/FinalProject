@@ -21,6 +21,7 @@ library(ranger)
 library(parsnip)
 library(janitor)
 library(sf)
+library(purrr)
 theme_set(theme_minimal())
 ```
 
@@ -28,16 +29,26 @@ theme_set(theme_minimal())
 # Load Sea Level Rise Maps (2050s 500-year Floodplain)
 unzip(
   zipfile = "data/Sea Level Rise Maps (2050s 500-year Floodplain)-20220418T210520Z-001.zip",
-  exdir = "data"
+  exdir = "data/Sea Level Rise Maps (2050s 500-year Floodplain)"
 )
-floodplain <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp")
+floodplain500 <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp") %>%
+  st_transform(crs = 4326)
 
-# Load NYC Stormwater Flood Map - Extreme Flood
+# Load Sea Level Rise Maps (2050s 100-year Floodplain)
+
 unzip(
-  zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb-20220418T202948Z-001.zip",
-  exdir = "data"
+  zipfile = "data/Sea Level Rise Maps (2050s 100-year Floodplain).zip",
+  exdir = "data/Sea Level Rise Maps (2050s 100-year Floodplain)"
 )
-stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood/")
+floodplain100 <- st_read("data/Sea Level Rise Maps (2050s 100-year Floodplain)/geo_export_a34f512c-89ff-48cf-97c8-9bc470c59c2b.shp") %>%
+  st_transform(crs = 4326)
+
+# Load NYC Stormwater Flood Map - Extreme Flood (Problem: which file?)
+#unzip(
+#  zipfile = "data/NYC Stormwater Flood Map - Extreme #Flood.gdb-20220418T202948Z-001.zip",
+#  exdir = "data"
+#)
+#stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood/")
 
 # Load demographic data
 credential <- Sys.getenv("census_api_key")
@@ -65,19 +76,22 @@ demogdata <- get_acs(
     no_in_labor_force = "23025_007"
   ),
   state =  36,
-  county = c(005,047,051,081,085),
+  county = c(005, 047, 061, 081, 085),
   key = credentia
 )
 
 geo <- tracts(
   state = 36,
-  county = c(005,047,051,081,085)
-)
+  county = c(005, 047, 061, 081, 085),
+  cb = TRUE
+) %>%
+  st_transform(crs = 4326)
 
 ```
 
 ```{r Data cleaning}
 
+# Tidy demogdata and change it into sf object
 demogdata_clean <- demogdata %>%
   select(-moe) %>%
   pivot_wider(
@@ -94,29 +108,135 @@ demogdata_sf <- left_join(
   y = geo
 ) %>%
   st_as_sf() %>%
+  st_transform(crs = 4326) %>%
   mutate(
-    GEOID = as.numeric(GEOID),
+    GEOID = as.numeric(GEOID), #Label county name
     county = case_when(
       GEOID < 36047000000 ~ "Bronx",
-      GEOID < 36051000000 ~ "Kings",
-      GEOID < 36081000000 ~ "Livingston",
+      GEOID < 36061000000 ~ "Kings",
+      GEOID < 36081000000 ~ "New_York",
       GEOID < 36085000000 ~ "Queens",
       TRUE ~ "Richmood"
     )
   )
 
+# label floodplain100 and floodplain500 with county name
+geo_county <- geo %>%
+  mutate(
+    GEOID = as.numeric(GEOID),
+    county = case_when(
+      GEOID < 36047000000 ~ "Bronx",
+      GEOID < 36061000000 ~ "Kings",
+      GEOID < 36081000000 ~ "New_York",
+      GEOID < 36085000000 ~ "Queens",
+      TRUE ~ "Richmood"
+    )
+  )
+
+sf_use_s2(FALSE)
+floodplain_county <- function(county_name){
+  
+   x <- st_union(filter(geo_county, county == county_name)) %>%
+    st_as_sf(crs = 4326)
+  
+   y1 <- st_filter(floodplain100, x)
+   y2 <- st_filter(floodplain500, x)
+   
+   assign(paste("floodplain100_", county_name, sep = ""), y1, envir = .GlobalEnv)
+   assign(paste("floodplain500_", county_name, sep = ""), y2, envir = .GlobalEnv)
+}
+
+map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_county)
+
+
 ```
 
 
 ```{r Maps}
-
-floodplain %>%
-  ggplot () + 
+# test
+boundary_Bronx %>%
+  ggplot() +
+  geom_sf()
+floodplain100_Bronx %>%
+  ggplot() +
   geom_sf()
 
-demogdata_sf %>%
-  filter(county == "Kings") %>%
-  ggplot () + 
-  geom_sf(aes(fill = white), color = "white")
+# Plot NYC demographic data with floodplain100 and floodplain 500
+NYC_demo_floodplain <- function(demo_var){
+  
+  demo_NYU <- demogdata_sf %>%
+    rename("estimate" = demo_var)
+    
+  ggplot() + 
+  geom_sf(
+    data = demogdata_sf,
+    mapping = aes(fill = estimate), 
+    color = "white"
+  ) +
+  scale_fill_gradient(
+    low = "#cfe8f3",
+    high = "#062635",
+    na.value = "grey50"
+  ) +
+  geom_sf(
+    data = floodplain500,
+    fill = "red",
+    color = "red",
+    alpha = 0.1
+  ) +
+  geom_sf(
+    data = floodplain100,
+    fill = "yellow",
+    color = "yellow",
+    alpha = 0.1
+  )
+ 
+  ggsave(str_glue("image/plot_", demo_var, ".png", seq = ""), width = 12, height = 8)
+  
+}
+
+map(.x = names(demogdata_sf)[3:16], .f = NYC_demo_floodplain)
+
+
+# Plot NYC demographic data by counties with floodplain100 and floodplain 500
+county_demo_floodplain <- function(county_name, demo_var){
+  
+  demo_county <- demogdata_sf %>%
+    filter(county == county_name) %>%
+    rename("estimate" = demo_var)
+  
+  ggplot() + 
+  geom_sf(
+    data = demo_county,
+    mapping = aes(fill = estimate), 
+    color = "white"
+  ) +
+  scale_fill_gradient(
+    low = "#cfe8f3",
+    high = "#062635",
+    na.value = "white"
+  ) +
+  geom_sf(
+    data = get(paste("floodplain500", county_name, sep = "_")),
+    fill = "red",
+    color = "red",
+    alpha = 0.1
+  ) +
+  geom_sf(
+    data = get(paste("floodplain100", county_name, sep = "_")),
+    fill = "yellow",
+    color = "yellow",
+    alpha = 0.1
+  )
+  
+  ggsave(str_glue("image/plot", county_name, demo_var, ".png", sep = "_"), width = 12, height = 8)
+  
+}
+
+map2(
+  .x = rep(c("Bronx", "Kings", "New_York", "Queens", "Richmood"), each = 14),
+  .y = rep(names(demogdata_sf)[3:16], times = 5),
+  .f = county_demo_floodplain
+)
 
 ```
