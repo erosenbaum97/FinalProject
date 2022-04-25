@@ -8,7 +8,9 @@ library(ranger)
 library(parsnip)
 library(janitor)
 library(sf)
+
 library(ggiraph)
+
 theme_set(theme_minimal())
 
 #Data Extraction
@@ -65,9 +67,11 @@ stormwater_layers <- st_layers(dsn = sw_gdbfile, options = character(0), do_coun
 
 #````
 
+#3 
+
 
 #````{r, echo = FALSE}
-#3. Load NYC Demographic Data
+#4. Load NYC Demographic Data
 
 credential <- Sys.getenv("census_api_key")
 
@@ -94,6 +98,7 @@ sex_by_age <- c(total_by_age ="B01001_001",  #sex_by_age
                 female_by_age_total = "B01001_026")
 
 
+
 demogdata <- get_acs(
   geography = "tract",
   year = 2020,
@@ -105,40 +110,36 @@ demogdata <- get_acs(
                 race
   ),
   state =  36,
-  county = c(005,047,051,081,085),
+  county = c(005,047,061,081,085),
   key = credentia
 )
 
-
 geo <- tracts(
   state = 36,
-  county = c(005,047,051,081,085)
+  county = c(005,047,061,081,085)
 ) %>%
   #Writes all column names in lower_case  
   rename_all(~str_to_lower(.)) %>%
   #Replaces the white space in column names with underscores
-  rename_all(~str_replace_all(., " ", "_")) 
-
-
+  rename_all(~str_replace_all(., " ", "_")) %>% 
+  str_extract(x, "[,alpha,]*") 
 #Data Cleaning 
 demogdata_clean <- demogdata %>%
-  select(-moe) %>%
+  select(-moe, -NAME) %>%
   pivot_wider(
     names_from = variable,
     values_from = estimate
   ) %>%
+  mutate_all(~replace(., is.na(.), 0)) %>%
   #Writes all column names in lower_case  
   rename_all(~str_to_lower(.)) %>%
   #Replaces the white space in column names with underscores
-  rename_all(~str_replace_all(., " ", "_"))  %>%
-  
-#names <-  demogdata_clean  %>% 
-#  select(geoid, name) %>% 
-  #  mutate(name=strsplit(name, ",")) %>% 
-  #  unnest(name)  %>% 
-  # subset(name != " New York")  %>% 
-  
-  
+  rename_all(~str_replace_all(., " ", "_")) %>%
+  str_replace_all(names, 
+                  pattern = ",", 
+                  replacement = "") 
+
+
 # how to deal with missing value for household income especially since it is important?
 
 geo <- geo %>%
@@ -152,11 +153,12 @@ demogdata_sf <- left_join(
   mutate(
     geoid = as.numeric(geoid),
     county = case_when(
-      geoid < 36047000000 ~ "Bronx",
-      geoid < 36051000000 ~ "Kings",
-      geoid < 36081000000 ~ "Livingston",
-      geoid < 36085000000 ~ "Queens",
-      TRUE ~ "Richmood"
+      geoid < 36007000000 ~ "Bronx County",
+      geoid < 36049000000 ~ "Kings County",
+      geoid < 36053000000 ~ "Livingston County",
+      geoid < 36063000000 ~ "New York County",
+      geoid < 36083000000 ~ "Queens County",
+      TRUE ~ "Richmood County"
     )
   ) 
 
