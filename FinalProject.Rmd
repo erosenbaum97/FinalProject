@@ -11,17 +11,17 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
-library(tidycensus)
 library(tidyverse)
+library(tidycensus)
+library(janitor)
+library(sf)
+library(purrr)
+library(rgdal)
 library(tidymodels)
-library(ggplot2)
 library(tigris)
 library(randomForest)
 library(ranger)
 library(parsnip)
-library(janitor)
-library(sf)
-library(purrr)
 theme_set(theme_minimal())
 ```
 
@@ -44,11 +44,47 @@ floodplain100 <- st_read("data/Sea Level Rise Maps (2050s 100-year Floodplain)/g
   st_transform(crs = 4326)
 
 # Load NYC Stormwater Flood Map - Extreme Flood (Problem: which file?)
-#unzip(
-#  zipfile = "data/NYC Stormwater Flood Map - Extreme #Flood.gdb-20220418T202948Z-001.zip",
-#  exdir = "data"
-#)
-#stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood/")
+unzip(
+  zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb-20220418T202948Z-001.zip",
+  exdir = "data"
+)
+stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood.gdb", layer = "NYC_Stormwater_Flood_Map_Extreme_Flood") %>% 
+  st_transform(crs = 4326)
+
+stormwater %>% 
+  names()
+
+stormwater %>% 
+  ggplot() +
+  geom_sf()
+
+# NFHL (The National Flood Hazard Layer) 
+unzip(
+  zipfile = "data/NFHL_36_20211216.zip",
+  exdir = "data/NFHL"
+)
+
+ogrListLayers("C:/Users/zheng/Desktop/670 DS/FinalProject/data/NFHL/NFHL_36_20211216.gdb")
+
+NFHL <- st_read("data/NFHL/NFHL_36_20211216.gdb", layer = "S_FLD_HAZ_AR") %>% 
+  st_transform(crs = 4326)
+
+geo <- tracts(
+  state = 36,
+  county = c(005, 047, 061, 081, 085),
+  cb = TRUE
+) %>%
+  st_transform(crs = 4326)
+
+NYC_boundary <- st_union(geo) %>% 
+  st_as_sf(crs = 4326)
+
+sf_use_s2(FALSE)
+NFHL_NYC <- st_filter(NFHL, NYC_boundary)
+
+NFHL_NYC %>% 
+  ggplot() +
+  geom_sf()
 
 # Load demographic data
 credential <- Sys.getenv("census_api_key")
@@ -157,7 +193,7 @@ map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_
 boundary_Bronx %>%
   ggplot() +
   geom_sf()
-floodplain100_Bronx %>%
+Sandy %>%
   ggplot() +
   geom_sf()
 
