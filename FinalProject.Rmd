@@ -246,7 +246,7 @@ map2<- map2(
 
 ```{r Setting Up Models}
 # joins floodplain with census tract map and codes tracts by whether they are in floodplain
-floodtracts <- st_join(geo,floodplain100, join = st_intersects, left = FALSE)
+floodtracts <- st_join(geo,floodplain500, join = st_intersects, left = FALSE)
 demogdataflood <- demogdata_clean %>%
   mutate(flood = ifelse(GEOID %in% floodtracts$GEOID,1, 0))
 
@@ -334,6 +334,15 @@ precision(data = predictions,
 ```
 
 ```{r Logistic Regression Model}
+# run an initial logistic regression to get data for variable importance
+floodlogit <- glm(flood ~., data = floodtracts_train, family = "binomial")
+
+# displays importance of 10 most important variables
+importances <- varImp(floodlogit)
+importances %>%
+  arrange(desc(Overall)) %>%
+  top_n(10)
+
 # sets up logistic regression model 
 logistic_mod <- logistic_reg() %>%
   set_engine("glm")
@@ -347,20 +356,12 @@ logistic_wf <- workflow() %>%
 logistic_fit <- logistic_wf %>%
   fit(data = floodtracts_train)
 
-# displays importance of 10 most important variables
-importances <- varImp(logreg)
-importances %>%
-  arrange(desc(Overall)) %>%
-  top_n(10)
-
 # show most important variables (according to decision tree model) by borough
 demogdatafloodboro %>%
   group_by(county, flood) %>%
-  summarize_at(vars("employed", "poverty", "high_school", "white"), mean)
+  summarize_at(vars("employed", "poverty", "high_school", "white", "bachelor"), mean)
 
-# applies model to testing data and codes probabilities as 0 or1 
-predictionslg <- predict(logreg, floodtracts_test)
-binarypreds <- ifelse(predictionslg > 0.5, 1, 0)
+# applies model to testing data 
 predictionslog <- bind_cols(
   floodtracts_test,
   predict(object = logistic_fit, new_data = floodtracts_test),
