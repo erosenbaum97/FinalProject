@@ -12,20 +12,24 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
 library(tidyverse)
-library(tidycensus)
-library(janitor)
 library(sf)
+library(readr)
+library(tidycensus)
+library(tigris)
+library(janitor)
+library(patchwork)
+
 library(purrr)
 library(rgdal)
 library(tidymodels)
-library(tigris)
+
 library(randomForest)
 library(ranger)
 library(parsnip)
 theme_set(theme_minimal())
 ```
 
-```{r Reading in Data}
+```{r load and clean floodplain Data}
 # Load Sea Level Rise Maps (2050s 500-year Floodplain)
 unzip(
   zipfile = "data/Sea Level Rise Maps (2050s 500-year Floodplain)-20220418T210520Z-001.zip",
@@ -35,7 +39,6 @@ floodplain500 <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/g
   st_transform(crs = 4326)
 
 # Load Sea Level Rise Maps (2050s 100-year Floodplain)
-
 unzip(
   zipfile = "data/Sea Level Rise Maps (2050s 100-year Floodplain).zip",
   exdir = "data/Sea Level Rise Maps (2050s 100-year Floodplain)"
@@ -43,48 +46,9 @@ unzip(
 floodplain100 <- st_read("data/Sea Level Rise Maps (2050s 100-year Floodplain)/geo_export_a34f512c-89ff-48cf-97c8-9bc470c59c2b.shp") %>%
   st_transform(crs = 4326)
 
-# Load NYC Stormwater Flood Map - Extreme Flood (Problem: which file?)
-unzip(
-  zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb-20220418T202948Z-001.zip",
-  exdir = "data"
-)
-stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood.gdb", layer = "NYC_Stormwater_Flood_Map_Extreme_Flood") %>% 
-  st_transform(crs = 4326)
+```
 
-stormwater %>% 
-  names()
-
-stormwater %>% 
-  ggplot() +
-  geom_sf()
-
-# NFHL (The National Flood Hazard Layer) 
-unzip(
-  zipfile = "data/NFHL_36_20211216.zip",
-  exdir = "data/NFHL"
-)
-
-ogrListLayers("C:/Users/zheng/Desktop/670 DS/FinalProject/data/NFHL/NFHL_36_20211216.gdb")
-
-NFHL <- st_read("data/NFHL/NFHL_36_20211216.gdb", layer = "S_FLD_HAZ_AR") %>% 
-  st_transform(crs = 4326)
-
-geo <- tracts(
-  state = 36,
-  county = c(005, 047, 061, 081, 085),
-  cb = TRUE
-) %>%
-  st_transform(crs = 4326)
-
-NYC_boundary <- st_union(geo) %>% 
-  st_as_sf(crs = 4326)
-
-sf_use_s2(FALSE)
-NFHL_NYC <- st_filter(NFHL, NYC_boundary)
-
-NFHL_NYC %>% 
-  ggplot() +
-  geom_sf()
+```{r loan and clean 2020 census data}
 
 # Load demographic data
 credential <- Sys.getenv("census_api_key")
@@ -116,17 +80,6 @@ demogdata <- get_acs(
   key = credentia
 )
 
-geo <- tracts(
-  state = 36,
-  county = c(005, 047, 061, 081, 085),
-  cb = TRUE
-) %>%
-  st_transform(crs = 4326)
-
-```
-
-```{r Data cleaning}
-
 # Tidy demogdata and change it into sf object
 demogdata_clean <- demogdata %>%
   select(-moe) %>%
@@ -134,7 +87,6 @@ demogdata_clean <- demogdata %>%
     names_from = variable,
     values_from = estimate
   )
-# how to deal with missing value?
 
 geo <- geo %>%
   select(GEOID, geometry)
@@ -184,16 +136,11 @@ floodplain_county <- function(county_name){
 
 map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_county)
 
-
 ```
-
 
 ```{r Maps}
 # test
 boundary_Bronx %>%
-  ggplot() +
-  geom_sf()
-Sandy %>%
   ggplot() +
   geom_sf()
 
@@ -274,5 +221,269 @@ map2(
   .y = rep(names(demogdata_sf)[3:16], times = 5),
   .f = county_demo_floodplain
 )
+
+```
+
+```{r Setting Up Models}
+# joins floodplain with census tract map and codes tracts by whether they are in floodplain
+floodtracts <- st_join(geo,floodplain500, join = st_intersects, left = FALSE)
+demogdataflood <- demogdata_clean %>%
+  mutate(flood = ifelse(GEOID %in% floodtracts$GEOID,1, 0))
+# plot unified data showing census tracts contained within floodplain
+ggplot() + 
+  geom_sf(
+    data= floodtracts 
+  )
+# add county name to data indicaing which tracts are within floodplain 
+demogdatafloodboro <- demogdataflood %>%
+    mutate(
+    GEOID = as.numeric(GEOID), #Label county name
+    county = case_when(
+      GEOID < 36047000000 ~ "Bronx",
+      GEOID < 36061000000 ~ "Kings",
+      GEOID < 36081000000 ~ "New_York",
+      GEOID < 36085000000 ~ "Queens",
+      TRUE ~ "Richmond"))
+
+
+
+smalldemogdataflood <- subset(demogdatafloodboro, select = -c(GEOID, NAME, county))
+nadrop <- na.omit(smalldemogdataflood)
+nadrop$flood <- factor(nadrop$flood)
+
+
+# splits data into training and testing groups
+split <- initial_split(nadrop, prop = 0.7, strata = "flood")
+floodtracts_train <- training (split)
+floodtracts_test <- testing (split)
+# creates a recipe for the models using all variables as predictors 
+floodtracts_rec <- 
+  recipe(flood ~ ., data = floodtracts_train) %>%
+  # center and scale all predictors
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors()) %>%
+  # drop near zero variance for all predictors
+  step_nzv(all_predictors())
+# sets up resampling using 10-fold cross validation
+folds <- vfold_cv(data = floodtracts_train, v = 10, repeats = 1)
+```
+
+```{r CART Model}
+# creates cart model
+cart_mod <-
+  decision_tree() %>%
+  set_engine(engine = "rpart") %>%
+  set_mode(mode = "classification")
+# creates cart workflow
+cart_wf <- workflow() %>%
+  add_recipe(floodtracts_rec) %>%
+  add_model(cart_mod)
+# fits training data to workflow
+cart_fit <- cart_wf %>%
+  fit(data = floodtracts_train)
+# plots decision tree
+rpart.plot::rpart.plot(x = cart_fit$fit$fit$fit)
+# applies model to testing data
+predictions <- bind_cols(
+  floodtracts_test,
+  predict(object = cart_fit, new_data = floodtracts_test),
+  predict(object = cart_fit, new_data = floodtracts_test, type = "prob")
+)
+# shows confusion matrix derived from model application 
+conf_mat(data = predictions,
+         truth = flood,
+         estimate = .pred_class)
+# displays accuracy of cart model
+accuracy(data = predictions,
+         truth = flood,
+         estimate = .pred_class)
+# displays precision of cart model
+precision(data = predictions,
+          truth = flood,
+          estimate = .pred_class)
+```
+
+```{r Logistic Regression Model}
+# run an initial logistic regression to get data for variable importance
+floodlogit <- glm(flood ~., data = floodtracts_train, family = "binomial")
+# displays importance of 10 most important variables
+importances <- varImp(floodlogit)
+importances %>%
+  arrange(desc(Overall)) %>%
+  top_n(10)
+# sets up logistic regression model 
+logistic_mod <- logistic_reg() %>%
+  set_engine("glm")
+# creates LR model workflow 
+logistic_wf <- workflow() %>%
+  add_model(logistic_mod) %>%
+  add_recipe(floodtracts_rec)
+# fits training data to logistic model 
+logistic_fit <- logistic_wf %>%
+  fit(data = floodtracts_train)
+# show most important variables (according to decision tree model) by borough
+demogdatafloodboro %>%
+  group_by(county, flood) %>%
+  summarize_at(vars("employed", "poverty", "high_school", "white", "bachelor"), mean)
+# applies model to testing data 
+predictionslog <- bind_cols(
+  floodtracts_test,
+  predict(object = logistic_fit, new_data = floodtracts_test),
+  predict(object = logistic_fit, new_data = floodtracts_test, type = "prob")
+)
+# displays confusion matrix generated by logistic regression model 
+conf_mat(data = predictionslog,
+         truth = flood,
+         estimate = .pred_class)
+# displays accuracy of logistic regression model 
+accuracy(data = predictionslog,
+         truth = flood,
+         estimate = .pred_class)
+# displays precision of logistic regression model 
+precision(data = predictionslog,
+          truth = flood,
+          estimate = .pred_class)
+```
+
+```{r KNN Model}
+# sets up K-nearest neighbors model
+knn_mod <-
+  nearest_neighbor(neighbors = 5) %>%
+  set_engine(engine = "kknn") %>%
+  set_mode(mode = "classification")
+# creates a knn workflow
+knn_wf <-
+  workflow() %>%
+  add_recipe(floodtracts_rec) %>%
+  add_model(knn_mod)
+# fits the knn model on the training data
+knn_fit <- knn_wf %>%
+  fit(data = floodtracts_train)
+# applies knn model to training data
+predictionsknn <- bind_cols(
+  floodtracts_test,
+  predict(object = knn_fit, new_data = floodtracts_test)
+)
+# displays confusion matrix generated by knn model
+conf_mat(data = predictionsknn,
+         truth = flood,
+         estimate = .pred_class)
+# displays accuracy of knn model
+accuracy(data = predictionsknn,
+         truth = flood,
+         estimate = .pred_class)
+# displays precision of knn model
+precision(data = predictionsknn,
+          truth = flood,
+          estimate = .pred_class)
+```
+
+
+## Test Other Data
+### Load and clean data for modeling
+
+```{r load and clean 2010 geographic data}
+# NOTE: As Sandy happened in 2012, we use 2010 geographic data instead of 2020 one.
+geo2010 <- tracts(
+  state = 36,
+  cb = TRUE,
+  year = 2010
+) %>%
+  st_transform(crs = 4326)
+
+geo2010 <- geo2010 %>% 
+  select(-STATE, -NAME, -LSAD, -CENSUSAREA, -COUNTYFP, -STATEFP) %>% 
+  clean_names() %>%
+  mutate(geoid = substr(geo_id, 10, 20)) %>% 
+  select(-geo_id)
+
+```
+
+```{r load, clean, and join Sandy data}
+
+# Flooding damage
+Sandy_damage <- read_csv("data/Sandy_Damage_Estimates_by_Block_Group.csv") %>% 
+  select(GEOID, total_dmg) %>% 
+  clean_names() %>% 
+  filter(str_detect(geoid, "^36")) %>% 
+  mutate(geoid = substr(geoid, 1, 11)) %>% 
+  group_by(geoid) %>% 
+  mutate(total_dmg = sum(total_dmg)) %>% 
+  unique()
+
+# Sandy high water mark (hwm)
+Sandy_hwm_p <- read_csv("data/FilteredHWMs.csv") %>% 
+  clean_names() %>% 
+  select(latitude, longitude, state_name, elev_ft) %>% 
+  filter(state_name == "NY") %>% 
+  select(-state_name) %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+sf_use_s2(FALSE)
+Sandy_hwm_ct <- st_join(geo2010, Sandy_hwm_p, join = st_contains) %>% 
+  filter(!is.na(elev_ft))
+
+## question: one census tract had several hwm elevation feet?
+## Sandy_hwm_ct %>% group_by(geoid) %>% summarise(n=sum(n())) %>% filter(n>1)
+
+Sandy_dmg_hwm <- inner_join(Sandy_hwm_ct, Sandy_damage)
+
+```
+
+```{r loan and clean 2012 census data}
+
+# Load demographic data
+credential <- Sys.getenv("census_api_key")
+
+lookup_var <- load_variables(2012, "acs5")
+
+demogdata2012 <- get_acs(
+  geography = "tract",
+  year = 2012,
+  variables = c(
+    white = "B02001_002", #race
+    black = "B02001_003",
+    indian_alaska = "B02001_004",
+    asian = "B02001_005",
+    pacific = "B02001_006",
+    hhincome = "B19013_001", # median household income
+    poverty = "C17002_001", # poverty level
+    no_schooling = "B15003_002", #education attainment
+    elementary_school = "B15003_009",
+    middle_school = "B15003_012",
+    high_school = "B15003_017",
+    bachelor = "B15003_022",
+    employed = "B23025_004", # employment status
+    unemployed = "B23025_005",
+    no_in_labor_force = "23025_007"
+  ),
+  state =  36,
+  key = credential
+)
+
+# Tidy demogdata and change it into sf object
+demogdata2012_clean <- demogdata2012 %>%
+  select(-moe, -NAME) %>%
+  rename(geoid = GEOID) %>% 
+  pivot_wider(
+    names_from = variable,
+    values_from = estimate
+  )
+
+demogdata2012_sf <- left_join(
+  x = demogdata2012_clean, 
+  y = geo2010
+) %>%
+  st_as_sf() %>%
+  st_transform(crs = 4326)
+
+modeling_data <- st_join(Sandy_dmg_hwm, demogdata2012_sf, join = st_equals) %>% 
+  select(-county.y, -tract.y, -geoid.y) %>% 
+  rename(county = county.x, tract = tract.x, geoid = geoid.x)
+
+```
+
+```{r }
+
 
 ```
