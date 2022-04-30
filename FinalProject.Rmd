@@ -119,7 +119,7 @@ geo_county <- geo %>%
   )
 
 sf_use_s2(FALSE)
-floodplain_county <- function(county_name){
+# floodplain_county <- function(county_name){
   
    x <- st_union(filter(geo_county, county == county_name)) %>%
     st_as_sf(crs = 4326)
@@ -131,18 +131,14 @@ floodplain_county <- function(county_name){
    assign(paste("floodplain500_", county_name, sep = ""), y2, envir = .GlobalEnv)
 }
 
-map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_county)
+# map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_county)
 
 ```
 
 ```{r Maps}
-# test
-boundary_Bronx %>%
-  ggplot() +
-  geom_sf()
 
 # Plot NYC demographic data with floodplain100 and floodplain 500
-NYC_demo_floodplain <- function(demo_var){
+#NYC_demo_floodplain <- function(demo_var){
   
   demo_NYU <- demogdata_sf %>%
     rename("estimate" = demo_var)
@@ -175,11 +171,11 @@ NYC_demo_floodplain <- function(demo_var){
   
 }
 
-map(.x = names(demogdata_sf)[3:16], .f = NYC_demo_floodplain)
+#map(.x = names(demogdata_sf)[3:16], .f = NYC_demo_floodplain)
 
 
 # Plot NYC demographic data by counties with floodplain100 and floodplain 500
-county_demo_floodplain <- function(county_name, demo_var){
+# county_demo_floodplain <- function(county_name, demo_var){
   
   demo_county <- demogdata_sf %>%
     filter(county == county_name) %>%
@@ -213,24 +209,27 @@ county_demo_floodplain <- function(county_name, demo_var){
   
 }
 
-map2(
-  .x = rep(c("Bronx", "Kings", "New_York", "Queens", "Richmood"), each = 14),
-  .y = rep(names(demogdata_sf)[3:16], times = 5),
-  .f = county_demo_floodplain
-)
+#map2(
+#  .x = rep(c("Bronx", "Kings", "New_York", "Queens", "Richmood"), # each = 14),
+#   .y = rep(names(demogdata_sf)[3:16], times = 5),
+#   .f = county_demo_floodplain
+# )
 
 ```
 
 ```{r Setting Up Models}
 # joins floodplain with census tract map and codes tracts by whether they are in floodplain
 floodtracts <- st_join(geo,floodplain500, join = st_intersects, left = FALSE)
+
 demogdataflood <- demogdata_clean %>%
   mutate(flood = ifelse(GEOID %in% floodtracts$GEOID,1, 0))
+
 # plot unified data showing census tracts contained within floodplain
 ggplot() + 
   geom_sf(
     data= floodtracts 
   )
+
 # add county name to data indicaing which tracts are within floodplain 
 demogdatafloodboro <- demogdataflood %>%
     mutate(
@@ -241,8 +240,6 @@ demogdatafloodboro <- demogdataflood %>%
       GEOID < 36081000000 ~ "New_York",
       GEOID < 36085000000 ~ "Queens",
       TRUE ~ "Richmond"))
-
-
 
 smalldemogdataflood <- subset(demogdatafloodboro, select = -c(GEOID, NAME, county))
 nadrop <- na.omit(smalldemogdataflood)
@@ -542,12 +539,13 @@ wrap_plots(
 
 #Modeling
 #Because we cannot use geometric information to model, we have to ignore the geometry here
-Sandy_folds <- vfold_cv(tibble(Sandy_train)[4:19], v = 10, repeats = 1)
+Sandy_folds <- vfold_cv(tibble(Sandy_train)[c(4:19)], v = 10, repeats = 1)
 
-Sandy_rec <- recipe(total_dmg ~ ., data = tibble(Sandy_train)[4:19]) %>% 
-  step_center(all_predictors()) %>% 
-  step_scale(all_predictors())
-  #step_naomit(all_predictors())
+Sandy_rec <- recipe(total_dmg ~ ., data = tibble(Sandy_train)[c(4:19)]) %>%
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
+  
+#step_naomit(all_predictors())
 #Any thing else?
 
 ##Random Forest
@@ -557,7 +555,7 @@ Sandy_rf_mod <- rand_forest(mtry = tune(), trees = tune()) %>%
 
 rf_grid<- Sandy_rf_mod %>% 
   parameters() %>% 
-  finalize(tibble(Sandy_train)[5:19]) %>% 
+  finalize(tibble(Sandy_train)[c(-1, -2, -3, -5, -20)]) %>% 
   grid_latin_hypercube(size = 10)
 
 Sandy_rf_wf <- workflow() %>% 
@@ -593,7 +591,6 @@ Sandy_en_cv <- Sandy_en_wf %>%
 Sandy_knn_mod <- nearest_neighbor(neighbors = tune()) %>%
   set_engine("kknn") %>% 
   set_mode("regression")
-  
 
 knn_grid <- grid_regular(neighbors(), levels = 10)
 
@@ -624,7 +621,7 @@ Sandy_knn_rmse <- Sandy_knn_cv %>%
   group_by(id) %>%
   summarise(Sandy_knn_rmse = mean(.estimate))
 
-bind_cols(
+Sandy_rmse <- bind_cols(
   fold = Sandy_rf_rmse$id,
   Sandy_rf = Sandy_rf_rmse$Sandy_rf_rmse,
   Sandy_en = Sandy_en_rmse$Sandy_en_rmse,
@@ -634,29 +631,21 @@ bind_cols(
     cols = 2:4,
     names_to = "model",
     values_to = "rmse"
-  ) %>%
+  )
+
+P3 <- Sandy_rmse %>% 
   ggplot() +
-  geom_point(
-    aes(x = fold, y = rmse, color = model)
+  geom_boxplot(
+    aes(x = model, y = rmse)
   )
 
-## average RMSE of lasso model
-Sandy_rf_rmse %>%
+T1 <- Sandy_rmse %>% 
+  group_by(model) %>% 
   summarise(
-    mean = mean(Sandy_rf_rmse)
+    rmse = mean(rmse)
   )
 
-## average RMSE of random forest model
-Sandy_en_rmse %>%
-  summarise(
-    mean = mean(Sandy_en_rmse)
-  )
-
-## average RMSE of decision tree model
-Sandy_knn_rmse %>%
-  summarise(
-    mean = mean(Sandy_knn_rmse)
-  )
+P3 + gridExtra::tableGrob(T1)
 
 ## Randome Forest is the best model among the three.
 
@@ -669,12 +658,47 @@ Sandy_final_wf <- Sandy_rf_wf %>%
 )
 
 Sandy_final_fit <- Sandy_final_wf %>%
-  fit(data = tibble(Sandy_train)[3:19])
+  fit(data = tibble(Sandy_train)[4:19])
 
-bind_cols(
+##Assessment with test data
+Sandy_prediction <- Sandy_final_fit %>% 
+  predict(new_data = tibble(Sandy_test)[4:19])
+
+Sandy_assess <- bind_cols(
   Sandy_test,
-  predict_dmg = predict(object = Sandy_final_fit, new_data = tibble(Sandy_test)[3:19])
-) %>%
-  rmse(truth = total_dmg, estimate = .pred)
+  predict_dmg = Sandy_prediction$.pred
+) 
+
+tibble(Sandy_assess) %>% 
+  rmse(truth = total_dmg, estimate = predict_dmg)
+
+tibble(Sandy_assess) %>% 
+  select(total_dmg, predict_dmg) %>% 
+  pivot_longer(
+    cols = 1:2,
+    names_to = "true_prediction",
+    values_to = "dmg"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = dmg, group = true_prediction, fill = true_prediction, color = true_prediction), alpha = 0.5) +
+  labs(x = "damage")
+
+P5 <- Sandy_assess %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_dmg), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  )
+
+P6 <- Sandy_assess %>% 
+  ggplot() +
+  geom_sf(aes(fill = predict_dmg), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  )
+
+P5 / P6
 
 ```
