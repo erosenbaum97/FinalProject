@@ -18,10 +18,11 @@ library(tidycensus)
 library(tigris)
 library(janitor)
 library(patchwork)
-
-library(purrr)
-library(rgdal)
 library(tidymodels)
+library(purrr)
+
+library(rgdal)
+
 
 library(randomForest)
 library(ranger)
@@ -477,13 +478,68 @@ demogdata2012_sf <- left_join(
   st_as_sf() %>%
   st_transform(crs = 4326)
 
-modeling_data <- st_join(Sandy_dmg_hwm, demogdata2012_sf, join = st_equals) %>% 
+Sandy_modeling_data <- st_join(Sandy_dmg_hwm, demogdata2012_sf, join = st_equals) %>% 
   select(-county.y, -tract.y, -geoid.y) %>% 
   rename(county = county.x, tract = tract.x, geoid = geoid.x)
 
 ```
 
-```{r }
+```{r set up modeling for Sandy }
 
+Sandy_split <- initial_split(Sandy_modeling_data, prop = 0.75)
+
+Sandy_train <- training(Sandy_split)
+Sandy_test <- testing(Sandy_split)
+
+Sandy_folds <- vfold_cv(Sandy_train, v = 10, repeats = 1)
+
+#EDA
+P1 <- Sandy_train %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_dmg), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  )
+
+P2 <- Sandy_train %>% 
+  ggplot() +
+  geom_sf(aes(fill = elev_ft), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  )
+
+P1 / P2
+# The elevation of water explains part of the total damage caused by Sandy hurricane.
+
+Sandy_EDA <- function(demo_var){
+ P <- Sandy_train %>% 
+  mutate(
+    elevation = case_when(
+      elev_ft < 6.6 ~ "Min-Q1",
+      elev_ft < 8.95 ~ "Q1-Median",
+      elev_ft < 10.775 ~ "Median-Q3",
+      TRUE ~ "Q3-Max"
+    ) 
+  ) %>%
+  rename("estimate" = demo_var) %>% 
+  ggplot() +
+  geom_point(
+    aes(estimate, total_dmg, color = elevation, shape = elevation),
+    size = 3,
+    alpha =0.7
+  ) +
+   labs(
+     x = demo_var,
+     y = "total claim of damage"
+   )
+  
+ assign(paste("P", demo_var, sep = "_"), P,  envir = .GlobalEnv)
+}
+
+wrap_plots(
+  map(.x = c("white", "bachelor", "hhincome", "employed"), .f = Sandy_EDA)
+)
 
 ```
