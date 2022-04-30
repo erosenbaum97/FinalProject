@@ -20,10 +20,6 @@ library(janitor)
 library(patchwork)
 library(tidymodels)
 library(purrr)
-
-library(rgdal)
-
-
 library(randomForest)
 library(ranger)
 library(parsnip)
@@ -480,18 +476,19 @@ demogdata2012_sf <- left_join(
 
 Sandy_modeling_data <- st_join(Sandy_dmg_hwm, demogdata2012_sf, join = st_equals) %>% 
   select(-county.y, -tract.y, -geoid.y) %>% 
-  rename(county = county.x, tract = tract.x, geoid = geoid.x)
+  rename(county = county.x, tract = tract.x, geoid = geoid.x) %>% 
+  na.omit()
 
 ```
 
 ```{r set up modeling for Sandy }
 
+set.seed(20220422)
+
 Sandy_split <- initial_split(Sandy_modeling_data, prop = 0.75)
 
 Sandy_train <- training(Sandy_split)
 Sandy_test <- testing(Sandy_split)
-
-Sandy_folds <- vfold_cv(Sandy_train, v = 10, repeats = 1)
 
 #EDA
 P1 <- Sandy_train %>% 
@@ -511,7 +508,7 @@ P2 <- Sandy_train %>%
   )
 
 P1 / P2
-# The elevation of water explains part of the total damage caused by Sandy hurricane.
+# The elevation of water and the geometric information explains part of the total damage caused by Sandy hurricane.
 
 Sandy_EDA <- function(demo_var){
  P <- Sandy_train %>% 
@@ -541,5 +538,143 @@ Sandy_EDA <- function(demo_var){
 wrap_plots(
   map(.x = c("white", "bachelor", "hhincome", "employed"), .f = Sandy_EDA)
 )
+#Holding the elevation of water at the constant level, the number of white in one census tract positively correlates to the total claims of damage.
+
+#Modeling
+#Because we cannot use geometric information to model, we have to ignore the geometry here
+Sandy_folds <- vfold_cv(tibble(Sandy_train)[4:19], v = 10, repeats = 1)
+
+Sandy_rec <- recipe(total_dmg ~ ., data = tibble(Sandy_train)[4:19]) %>% 
+  step_center(all_predictors()) %>% 
+  step_scale(all_predictors())
+  #step_naomit(all_predictors())
+#Any thing else?
+
+##Random Forest
+Sandy_rf_mod <- rand_forest(mtry = tune(), trees = tune()) %>%
+  set_engine("randomForest") %>% 
+  set_mode("regression")
+
+rf_grid<- Sandy_rf_mod %>% 
+  parameters() %>% 
+  finalize(tibble(Sandy_train)[5:19]) %>% 
+  grid_latin_hypercube(size = 10)
+
+Sandy_rf_wf <- workflow() %>% 
+  add_recipe(Sandy_rec) %>% 
+  add_model(Sandy_rf_mod)
+  
+Sandy_rf_cv <- Sandy_rf_wf %>% 
+  tune_grid(
+    resample = Sandy_folds,
+    grid = rf_grid,
+    metrics = metric_set(rmse)
+  )
+
+##Elastic Net
+Sandy_en_mod <- linear_reg(penalty = tune(), mixture = 0.5) %>%
+  set_engine("glmnet") %>% 
+  set_mode("regression")
+
+en_grid <- grid_regular(penalty(), levels = 10)
+
+Sandy_en_wf <- workflow() %>% 
+  add_recipe(Sandy_rec) %>% 
+  add_model(Sandy_en_mod)
+  
+Sandy_en_cv <- Sandy_en_wf %>% 
+  tune_grid(
+    resample = Sandy_folds,
+    grid = en_grid,
+    metrics = metric_set(rmse)
+  )
+
+##KNN
+Sandy_knn_mod <- nearest_neighbor(neighbors = tune()) %>%
+  set_engine("kknn") %>% 
+  set_mode("regression")
+  
+
+knn_grid <- grid_regular(neighbors(), levels = 10)
+
+Sandy_knn_wf <- workflow() %>% 
+  add_recipe(Sandy_rec) %>% 
+  add_model(Sandy_knn_mod)
+  
+Sandy_knn_cv <- Sandy_knn_wf %>% 
+  tune_grid(
+    resample = Sandy_folds,
+    grid = knn_grid,
+    metrics = metric_set(rmse)
+  )
+
+##Select the best model
+Sandy_rf_rmse <- Sandy_rf_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(Sandy_rf_rmse = mean(.estimate))
+
+Sandy_en_rmse <- Sandy_en_cv %>%
+  collect_metrics(summarize = FALSE) %>%
+  group_by(id) %>%
+  summarise(Sandy_en_rmse = mean(.estimate))
+
+Sandy_knn_rmse <- Sandy_knn_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(Sandy_knn_rmse = mean(.estimate))
+
+bind_cols(
+  fold = Sandy_rf_rmse$id,
+  Sandy_rf = Sandy_rf_rmse$Sandy_rf_rmse,
+  Sandy_en = Sandy_en_rmse$Sandy_en_rmse,
+  Sandy_knn = Sandy_knn_rmse$Sandy_knn_rmse
+) %>%
+  pivot_longer(
+    cols = 2:4,
+    names_to = "model",
+    values_to = "rmse"
+  ) %>%
+  ggplot() +
+  geom_point(
+    aes(x = fold, y = rmse, color = model)
+  )
+
+## average RMSE of lasso model
+Sandy_rf_rmse %>%
+  summarise(
+    mean = mean(Sandy_rf_rmse)
+  )
+
+## average RMSE of random forest model
+Sandy_en_rmse %>%
+  summarise(
+    mean = mean(Sandy_en_rmse)
+  )
+
+## average RMSE of decision tree model
+Sandy_knn_rmse %>%
+  summarise(
+    mean = mean(Sandy_knn_rmse)
+  )
+
+## Randome Forest is the best model among the three.
+
+Sandy_rf_best <- Sandy_rf_cv %>%
+  select_best(metric = "rmse")
+
+Sandy_final_wf <- Sandy_rf_wf %>%
+  finalize_workflow(
+  parameters = Sandy_rf_best
+)
+
+Sandy_final_fit <- Sandy_final_wf %>%
+  fit(data = tibble(Sandy_train)[3:19])
+
+bind_cols(
+  Sandy_test,
+  predict_dmg = predict(object = Sandy_final_fit, new_data = tibble(Sandy_test)[3:19])
+) %>%
+  rmse(truth = total_dmg, estimate = .pred)
 
 ```
