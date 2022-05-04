@@ -17,8 +17,9 @@ library(ggiraph)
 library(scales)
 library(patchwork)
 library(naniar)
+library(tmap)
 theme_set(theme_minimal())
-
+options(scipen = 999)
 #Who will survive the New York Floods of 2100?
 
 #Data Extraction
@@ -132,7 +133,9 @@ geo <- tracts(
   county = c(005, 047, 061, 081, 085),
   cb = TRUE
 ) %>%
-  st_transform(crs = 4326)
+  st_transform(crs = 4326) %>%
+  #Writes all column names in lower_case
+  rename_all(~str_to_lower(.))
 
 
 #```{r Data cleaning}
@@ -145,9 +148,11 @@ demo_clean <- demogdata %>%
   #Replaces the white space in column names with underscores
   rename_all(~str_replace_all(., " ", "_")) %>%
   separate(name, c("census_tract","county", "state"), sep = ", ")  %>%
-  select(-state) %>%
   pivot_wider(names_from = variable,
             values_from = estimate)
+glimpse()
+
+#To Impute Missing Data
 
 #To see the number of missing data 
 #how many?
@@ -191,67 +196,102 @@ missing_qc <- hhincome_test %>%
 
 t.test(missing_mn, missing_bronx)
 
-nhanes_mimp <- demo_clean %>%
-  filter(county == "Queens County") %>%
-  select(hhincome) %>%
+#Add labs to this graph 
+testing_graph <- function(county = "Queens County"){
+  testing_imp <- demo_clean %>%
+  filter(county == county) %>%
   select(geoid, census_tract, hhincome) %>%
   bind_shadow(only_miss = TRUE) %>%
   impute_mean_all() %>%
-  add_label_shadow()
+  add_label_shadow()  %>%
+  ggplot(aes(x = hhincome, fill = any_missing)) + 
+  geom_density(alpha = 0.3)
+  return(testing_imp)
+  }
+testing_graph(county = c("Queens County","Kings County", "Bronx County","New YorkCounty"))
 
-ggplot(nhanes_mimp, aes(x = hhincome, y = hhincome,  colour = any_missing)) +
-  geom_point(size = 3, alpha = 0.6)+
-  theme_minimal()
 
 #Final Imputation
 demo_clean <- demo_clean %>%
   left_join(mean_impute, by = c("county")) %>%
   mutate(hhincome = ifelse(is.na(hhincome.x), hhincome.y, hhincome.x)) %>%
   select(-hhincome.y, -hhincome.x)
-view(demo_clean)
 
+#Prep for Demographic Mapping
 
+#calculating the percentage of minorities
+demo_clean$rate_of_minorities <- round((demo_clean$black + demo_clean$asian + demo_clean$indian_alaska + demo_clean$pacific)/(demo_clean$white + demo_clean$black + demo_clean$asian + demo_clean$indian_alaska + demo_clean$pacific) * 100, 1) %>%
+  replace(., is.nan(.), 0)
 
+#The employment rate in the tract 
+demo_clean$employment_rate <- round((demo_clean$employed)/(demo_clean$employed + demo_clean$unemployed) * 100, 1) %>%
+  replace(., is.nan(.), 0)
+
+#The income level 
+demo_clean %>% 
+  group_by(hhincome) %>% 
+  mutate(income_levels = case_when(
+      hhincome < 50000 ~ "Low Income",
+      hhincome < 100000 ~ "Lower Middle Income",
+      hhincome <  150000 ~ "Middle Income",
+      hhincome <  200000 ~ "Higher Middle Income",
+      TRUE ~ "High Income"
+  ))
+glimpse(demo_clean)
 
 #Plotting to explore demographic data 
-
-
-
-
-
+#Function 
 geo <- geo %>%
-  select(GEOID, geometry)
+  select(geoid, geometry)
 
-demogdata_sf <- left_join(
-  x = demogdata_clean,
-  y = geo
-) %>%
+demography_tract <- left_join(
+  x = demo_clean,
+  y = geo) %>%
   st_as_sf() %>%
-  st_transform(crs = 4326) %>%
-  mutate(
-    GEOID = as.numeric(GEOID), #Label county name
-    county = case_when(
-      GEOID < 36047000000 ~ "Bronx",
-      GEOID < 36061000000 ~ "Kings",
-      GEOID < 36081000000 ~ "New_York",
-      GEOID < 36085000000 ~ "Queens",
-      TRUE ~ "Richmond"
-    )
-  )
+  st_transform(crs = 4326)
+
+NYC_demo <- function (demo_var) {
+  demo_data <- demography_tract %>%
+  group_by()
+  rename("estimate" = demo_var) %>%
+  mutate(tooltip = str_glue(geoid, demo_var, sep = ":" ))  %>%
+  ggplot(demo_data) +
+  geom_sf_interactive(aes(data_id = geoid, fill = estimate, tooltip = tooltip), size = 0.2, color = NA, lwd = 0.3) +
+  scale_fill_gradient(
+    low = "#cfe8f3",
+    high = "#062635"
+  ) + 
+  labs( title = paste0("Estimated", demo_var, " in ", county_name),
+        subtitle = "Based on the 2020 ACS Data",
+        caption = "Data Source: The US Census Bureau",
+        fill = demo_var) 
+  
+
+  demo_data <- girafe(ggobj = demo_data) %>%
+    girafe_options(opts_hover(css = "fill:red;"),
+                 opts_zoom(max = 15))
+  return(demo_data)
+}
+
+NYC_demo(unemployed)
+map(.x = names(demography_tract)[4:24], .f = NYC_demo)
+
 
 # label floodplain100 and floodplain500 with county name
 geo_county <- geo %>%
   mutate(
-    GEOID = as.numeric(GEOID),
+    geoid = as.numeric(geoid),
     county = case_when(
-      GEOID < 36047000000 ~ "Bronx",
-      GEOID < 36061000000 ~ "Kings",
-      GEOID < 36081000000 ~ "New_York",
-      GEOID < 36085000000 ~ "Queens",
+      geoid < 36047000000 ~ "Bronx",
+      geoid < 36061000000 ~ "Kings",
+      geoid < 36081000000 ~ "New_York",
+      geoid < 36085000000 ~ "Queens",
       TRUE ~ "Richmond"
     )
   )
 
+
+```{r}
 sf_use_s2(FALSE)
 floodplain_county <- function(county_name){
   
@@ -266,19 +306,20 @@ floodplain_county <- function(county_name){
 }
 
 map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmond"), .f = floodplain_county)
+``
 
 
-
-
-
-#```{r Maps}
+```{r Maps}
 # test
 boundary_Bronx %>%
   ggplot() +
   geom_sf()
+
 floodplain100_Bronx %>%
   ggplot() +
   geom_sf()
+````
+
 
 # Plot NYC demographic data with floodplain100 and floodplain 500
 NYC_demo_floodplain <- function(demo_var){
@@ -308,10 +349,14 @@ NYC_demo_floodplain <- function(demo_var){
       fill = "yellow",
       color = "yellow",
       alpha = 0.1
-    )
+    ) +
+    labs(title = "New York City Floods Plain in 100 Years",
+        subtitle = "Data Source: The US Census Bureau",
+        caption = "Source: The City of New York",
+        fill = demo_var)
   
-  ggsave(str_glue("image/plot_", demo_var, ".png", seq = ""), width = 12, height = 8)
   
+# ggsave(str_glue("image/plot_", demo_var, ".png", seq = ""), width = 12, height = 8)
 }
 
 map(.x = names(demogdata_sf)[3:16], .f = NYC_demo_floodplain)
@@ -357,6 +402,10 @@ map2<- map2(
   .y = rep(names(demogdata_sf)[3:16], times = 5),
   .f = county_demo_floodplain
 )
+
+
+
+
 
 
 
@@ -540,69 +589,3 @@ precision(data = predictionsknn,
           truth = flood,
           estimate = .pred_class)
 
-
-
-
-
-
-
-
-#````{r, echo = FALSE}
-
- %>%
-#Writes all column names in lower_case
-rename_all(~str_to_lower(.)) %>%
-#Replaces the white space in column names with underscores
-rename_all(~str_replace_all(., " ", "_")) %>%
-str_extract(x, "[,alpha,]*")
-#Data Cleaning
-demogdata_clean <- demogdata %>%
-select(-moe, -NAME) %>%
-pivot_wider(
-names_from = variable,
-values_from = estimate
-) %>%
-mutate_all(~replace(., is.na(.), 0)) %>%
-#Writes all column names in lower_case
-rename_all(~str_to_lower(.)) %>%
-#Replaces the white space in column names with underscores
-rename_all(~str_replace_all(., " ", "_")) %>%
-str_replace_all(names,
-pattern = ",",
-replacement = "")
-
-
-# how to deal with missing value for household income especially since it is important?
-
-geo <- geo %>%
-select(geoid, geometry)
-
-demogdata_sf <- left_join(
-x = demogdata_clean,
-y = geo
-) %>%
-st_as_sf() %>%
-mutate(
-geoid = as.numeric(geoid),
-county = case_when(
-geoid < 36007000000 ~ "Bronx County",
-geoid < 36049000000 ~ "Kings County",
-geoid < 36053000000 ~ "Livingston County",
-geoid < 36063000000 ~ "New York County",
-geoid < 36083000000 ~ "Queens County",
-TRUE ~ "Richmood County"
-)
-)
-
-
-#Will make interactive
-floodplain %>%
-ggplot () +
-geom_sf()
-#Some missing data here too
-
-demogdata_sf %>%
-filter(county == "Kings") %>%
-ggplot () +
-geom_sf()
-scale_fill_viridis_d()
