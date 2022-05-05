@@ -173,20 +173,23 @@ mean_impute <- demo_clean %>%
   summarise(hhincome = mean(hhincome))
 mean_impute
 
+hhincome_test <- demo_clean %>%
+  mutate(missing_hhincome = is.na(hhincome))
+
 #testing imputations
-missing_bronx <- hhincome_test %>%
+missing_bronx <- demo_clean %>%
   filter(county == "Bronx County") %>%
   pull(missing_hhincome)
 
-missing_mn <- hhincome_test %>%
+missing_mn <- demo_clean %>%
   filter(county == "New York County") %>%
   pull(missing_hhincome)
 
-missing_rc <- hhincome_test %>%
+missing_rc <- demo_clean %>%
   filter(county == "Richmond County") %>%
   pull(missing_hhincome)
 
-missing_kc <- hhincome_test %>%
+missing_kc <- demo_clean %>%
   filter(county == "Kings County") %>%
   pull(missing_hhincome)
 
@@ -195,6 +198,10 @@ missing_qc <- hhincome_test %>%
   pull(missing_hhincome)
 
 t.test(missing_mn, missing_bronx)
+t.test(missing_rc, missing_bronx)
+t.test(missing_rc, missing_kc)
+t.test(missing_kc, missing_qc)
+
 
 #Add labs to this graph 
 testing_graph <- function(county = "Queens County"){

@@ -61,6 +61,7 @@ rename_all(~str_to_lower(.)) %>%
 rename_all(~str_replace_all(., " ", "_"))
 ```
 
+
 ```{r}
 #2. Load Sea Level Rise Maps (2050s 100-year Floodplain)
 # Extracting the zip folder and unzipping it
@@ -84,27 +85,6 @@ floodplain100 %>%
   rename_all(~str_to_lower(.)) %>%
   #Replaces the white space in column names with underscores
   rename_all(~str_replace_all(., " ", "_"))
-```
-
-
-```{r}
-#3. Load NYC Stormwater Flood Map - Extreme Flood Data
-
-# Extracting the zip folder and unzipping it
-stormwater_url <- "https://data.cityofnewyork.us/download/w8eg-8ha6/application%2Fzip"
-download.file( url = stormwater_url,
-destfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb.zip",
-mode = "wb"
-)
-unzip(zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb.zip", exdir = "data")
-file.remove("~/Desktop/FinalProject/data/NYC Stormwater Flood Map - Extreme Flood.gdb.zip")
-
-stormwater <- list.files(path = "data", pattern="\\.gdb$", full.names=TRUE)
-
-stormwater <- st_read(paste0("data/NYC Stormwater Flood Map - Extreme Flood/", stormwater)) %>%
-  st_transform(crs = 4326)
-class(stormwater)
-
 ```
 
 
@@ -192,6 +172,8 @@ miss_case_summary(demo_clean)
 miss_case_table(demo_clean)
 vis_miss(demo_clean)
 
+hhincome_test <- demo_clean %>%
+  mutate(missing_hhincome = is.na(hhincome))
 
 #testing imputations
 missing_bronx <- hhincome_test %>%
