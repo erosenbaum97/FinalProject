@@ -1,6 +1,7 @@
 # PPOL 670 | Final Project
 
 ## Overview:
+-----------------------------
 
 #### Project Title 
 
@@ -21,6 +22,8 @@ The project is to provide insight into the staggering impact of climate change, 
 - [ ]  To inform policy on ways to anticipate, better target, and reduce the vulnerability of populations most at risk  
 
 
+## Project Design 
+-----------------------------
 
 ##### Data Used 
 - [ ] [2050s 500-year Floodplain] (https://data.cityofnewyork.us)
@@ -29,11 +32,22 @@ The project is to provide insight into the staggering impact of climate change, 
 - [ ] [New York City Flood Hazard Mapper(ArcGIS)] (https://dcp.maps.arcgis.com)
 - [ ] [American Community Survey] (https://www.census.gov/programs-surveys/acs/about.html)
 
-Data Techniques and Approaches:
+##### Data Techniques and Approaches:
 - [ ] Geospatial Analysis
 - [ ] API Pulls 
 - [ ] Supervised Machine Learning 
-- [ ] 
+
+##### Design Process:
+
+###### Technology Employed
+- [ ] R Programming Technology 
+
+
+
+
+
+
+
 
 ###### Project Limitations: 
 We anticipated several potential technical hurdles that may arise during the development of this project. 
@@ -41,8 +55,6 @@ We anticipated several potential technical hurdles that may arise during the dev
 
 
 
-###### Technology Employed
-[ ] R Programming Technology 
 
 
 
@@ -50,28 +62,25 @@ We anticipated several potential technical hurdles that may arise during the dev
 
 
 ## Instructions for Replication
----------------------------
+-----------------------------
 
 
 
 
-## Bibliography 
+## Bibliography
 
+-------------------------------
 
-
-
-
-----------
 
 ## Description of files:
 A  brief description of the files/directories in the repository 
-* The README.md file provides a brief overview of the objective of the code, a brief description of the files/directories in the repository, and instructions for how to run your code to replicate your analysis.
-* The FinalProject.Rmd file contains seperated code chunks for the project
+* The README.md file provides a brief overview of project and its policy implications 
+* The FinalProject.Rmd file contains all code chunks for the project
 * The FinalProject.html file contains the knitted output of the project. 
 * The gitignore file contains all the data that was used for the project
 
 Authors: 
-(Ethan Rosenbaum) [https://github.com/erosenbaum97]
-(Xinyu Zheng) [https://github.com/XZXinyuZheng]
-(Beryl Nana Ama Akuffo-Kwapong) [https://github.com/bnakwaps]
+* (Ethan Rosenbaum) [https://github.com/erosenbaum97] <br>
+* (Xinyu Zheng) [https://github.com/XZXinyuZheng] <br>
+* (Beryl Nana Ama Akuffo-Kwapong) [https://github.com/bnakwaps]  <br>
 
