@@ -32,9 +32,8 @@ The project is to provide insight into the staggering impact of climate change, 
 
 ##### Data Used 
 - [ ] [2050s 500-year Floodplain] (https://data.cityofnewyork.us)
-- [ ] [2050s 100-year Floodplain] (https://data.cityofnewyork.us)
-- [ ] [New York City Flood Hazard Mapper(ArcGIS)] (https://dcp.maps.arcgis.com)
-- [ ] [New York City Flood Hazard Mapper(ArcGIS)] (https://dcp.maps.arcgis.com)
+- [ ] [USGS Flood Events Viewer] (https://stn.wim.usgs.gov/fev/#Sandy)
+- [ ] [Sandy Damage Estimates by Block Group] (https://www.huduser.gov/maps/map_sandy_blockgroup.html)
 - [ ] [American Community Survey] (https://www.census.gov/programs-surveys/acs/about.html)
 
 ##### Data Techniques and Approaches:
