@@ -23,9 +23,9 @@ This project is on environmental justice and climate change resilience. Our proj
 The purpose of the project is to provide insight into the staggering impact of climate change, provide insight and visibility into the needs of populations at risk, and help inform policy.
 
 ##### Findings
-We find that the most important important factor with correlation to flooding is location. While this may seem intuitive, the  flooding can affects dwellers of specific geographic areas
-* 518 census tracts out of the across the city of new york are at risk of flooding by 2100, while this is what the data projects. There is a likelihood the costs of impact will extend to other tracts larger since life in neighbouring and adjacent tracts will be disrupted as well  
-* Potential Increase in Economic Inequality: While the income distribution of people living in floodplains are spread across various income groups, low income dwellers will most burdened with flood prevention costs, relocation or evacuations costs. This could potentially widen the already existing income inequality in New York city
+We find that the most important factor with correlation to flooding is location. While this may seem intuitive, flooding in one area can have damaging effects in adjacent regions. From our analysis, we found key points of interest:
+* 518 census tracts across the city of New York are at risk of flooding by 2100. While this is what the data projects, there is a likelihood the costs of impact will extend to other tracts due to negative externalities of flooding such as homelessness
+* Potential Increase in Economic Inequality: While the income distribution of people living in floodplains are spread across various income groups, low income dwellers will be most burdened with flood prevention costs, relocation or evacuations costs. This could potentially widen the already existing income inequality in New York city
 * High unemployment is best predictor of an area's flooding likelihood, so resilience projects should make sure to include those as stakeholders, since they might be at high risk
 
 ##### Recommendations
