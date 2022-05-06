@@ -66,7 +66,7 @@ Asking the question, will
 
 
 ###### Project Limitations: 
-We anticipated several potential technical hurdles that may arise during the development of this project. 
+We anticipated several potential technical hurdles that may arise during the development of this project. The size of the shapefiles was occassionally taxing on our computers, but we were able to clean the read-in data enough to mitigate this issue. Due to time constraints, we were also unable to meaningfully impute missing values. 
 
 
 
@@ -80,7 +80,7 @@ We anticipated several potential technical hurdles that may arise during the dev
 ## Instructions for Replication
 -----------------------------
 * Create a data folder where all datasets will be kept 
-* Install all packages and run data as 
+* Install all packages and run code as 
 
 
 
@@ -88,10 +88,11 @@ We anticipated several potential technical hurdles that may arise during the dev
 -------------------------------
 Hurricanes and Climate Change. Center for Climate and Energy Solutions. https://www.c2es.org/content/hurricanes-and-climate-change/
 
-Sea Level Rise Maps (2050s 500-year Floodplain). NYC Open Data. https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-500-year-Floodplain-/qwca-zqw3 
+Maps of Sandy Inundation Zone. United States Department of Housing and Urban Development. Updated February 10, 2022. https://www.huduser.gov/maps/map_sandy_blockgroup.html)
 
-Sea Level Rise Maps (2050s 100-year Floodplain). NYC Open Data. https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-100-year-Floodplain-/hbw8-2bah 
+Sandy Inundation Zone Data. NYC Open Data. Updated September 10, 2018. https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5
 
+Sea Level Rise Maps (2050s 500-year Floodplain). NYC Open Data. Updated September 16, 2021. https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-500-year-Floodplain-/qwca-zqw3 
 
 
 ##### Description of files:
@@ -100,5 +101,6 @@ A  brief description of the files/directories in the repository
 * The FinalProject.Rmd file contains all code chunks for the project
 * The FinalProject.html file contains the knitted output of the project. 
 * The gitignore file contains all the data that was used for the project
+* The Essay.html file contains a plain-language explanation of our motivating questions and our process. 
 
 
