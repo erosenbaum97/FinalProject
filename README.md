@@ -5,9 +5,9 @@
 * [Beryl Nana Ama Akuffo-Kwapong](https://github.com/bnakwaps) 
 
 ## Links to Github Pages
-Code and Output: https://github.com/erosenbaum97/FinalProject/blob/main/FinalProject.html
+Code and Output: https://erosenbaum97.github.io/FinalProject/FinalProject.html
 
-Supporting Essay: https://github.com/erosenbaum97/FinalProject/blob/main/Essay.html
+Supporting Essay: https://erosenbaum97.github.io/FinalProject/Essay.html
 
 ## Overview:
 -----------------------------
@@ -85,8 +85,13 @@ We anticipated several potential technical hurdles that may arise during the dev
 
 
 ## Bibliography
-
 -------------------------------
+Hurricanes and Climate Change. Center for Climate and Energy Solutions. https://www.c2es.org/content/hurricanes-and-climate-change/
+
+Sea Level Rise Maps (2050s 500-year Floodplain). NYC Open Data. https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-500-year-Floodplain-/qwca-zqw3 
+
+Sea Level Rise Maps (2050s 100-year Floodplain). NYC Open Data. https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-100-year-Floodplain-/hbw8-2bah 
+
 
 
 ##### Description of files:
