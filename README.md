@@ -41,8 +41,8 @@ We find that the most important important factor with correlation to flooding is
 ##### Data Used
 - [ ] [2050s 500-year Floodplain](https://data.cityofnewyork.us)
 - [ ] [American Community Survey](https://www.census.gov/programs-surveys/acs/about.html)
-- [ ] [ Sandy Inundation Zone](https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5)
-- [ ] [Maps of Sandy Inundation Zone](https://www.huduser.gov/maps/map_sandy_blockgroup.html)
+- [ ] [USGS Flood Event Viewer](https://stn.wim.usgs.gov/fev/#Sandy)
+- [ ] [Sandy Damage Estimates by Block Group](https://www.huduser.gov/maps/map_sandy_blockgroup.html)
 
 ##### Data Techniques and Approaches:
 * Geospatial Analysis
