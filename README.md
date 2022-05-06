@@ -1,4 +1,9 @@
 # PPOL 670 | Final Project
+Authors:
+* [Ethan Rosenbaum](https://github.com/erosenbaum97)
+* [Xinyu Zheng](https://github.com/XZXinyuZheng) 
+* [Beryl Nana Ama Akuffo-Kwapong](https://github.com/bnakwaps) 
+
 
 ## Overview:
 -----------------------------
@@ -79,8 +84,4 @@ A  brief description of the files/directories in the repository
 * The FinalProject.html file contains the knitted output of the project. 
 * The gitignore file contains all the data that was used for the project
 
-Authors: 
-* (Ethan Rosenbaum) [https://github.com/erosenbaum97] <br>
-* (Xinyu Zheng) [https://github.com/XZXinyuZheng] <br>
-* (Beryl Nana Ama Akuffo-Kwapong) [https://github.com/bnakwaps]  <br>
 
