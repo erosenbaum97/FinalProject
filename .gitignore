@@ -1,2 +1,5 @@
 data/
 .Rproj.user
+.RDataTmp
+.RDataTmp1
+FinalProject.Rproj

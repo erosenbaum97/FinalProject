@@ -20,7 +20,7 @@ Climate Change in New York City: Examining Flooding and Demographics
 This project is on environmental justice and climate change resilience. Our project focuses on New York City, a coastal city vulnerable to floods and hurricanes due to its extensively used waterfronts and coast. It is estimated that by 2050, 659,000 people in New York will be at risk to coastal flooding due to rising sea levels, and this risk is expected to rise in the future with worsening climate change. Using Geospatial Analysis, API Pulls and Supervised Machine Learning, we explore the impact of flooding on various areas in the state of New York. We explore the levels of impact experienced based on factors such as race, income, age, educational attainment, and population density to see if disparities exist. We also identify and predict the areas most prone to flooding, and potential damages based on population data
 
 ##### The Project Goal:
-The project of the project is to provide insight into the staggering impact of climate change, provide insight and visibility into the needs of populations at risk, and help inform policy.
+The purpose of the project is to provide insight into the staggering impact of climate change, provide insight and visibility into the needs of populations at risk, and help inform policy.
 
 ##### Findings
 We find that the most important important factor with correlation to flooding is location. While this may seem intuitive, the  flooding can affects dwellers of specific geographic areas
