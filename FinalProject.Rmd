@@ -12,267 +12,847 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
 library(tidyverse)
-library(tidycensus)
-library(janitor)
 library(sf)
-library(purrr)
-library(rgdal)
-library(tidymodels)
+library(readr)
+library(tidycensus)
 library(tigris)
+library(janitor)
+library(patchwork)
+library(tidymodels)
+library(purrr)
 library(randomForest)
 library(ranger)
 library(parsnip)
+library(caret)
+library(repurrrsive)
+library(glmnet)
+library(ggiraph)
+library(scales)
+library(naniar)
+library(raster)
+library(tmap)
+library(plotly)
+library(gapminder)
 theme_set(theme_minimal())
 ```
 
-```{r Reading in Data}
-# Load Sea Level Rise Maps (2050s 500-year Floodplain)
-unzip(
-  zipfile = "data/Sea Level Rise Maps (2050s 500-year Floodplain)-20220418T210520Z-001.zip",
-  exdir = "data/Sea Level Rise Maps (2050s 500-year Floodplain)"
-)
-floodplain500 <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp") %>%
-  st_transform(crs = 4326)
+## **2050s 500-year floodplain**
 
-# Load Sea Level Rise Maps (2050s 100-year Floodplain)
+### 1. Load and Clean 2020 Census Data
 
-unzip(
-  zipfile = "data/Sea Level Rise Maps (2050s 100-year Floodplain).zip",
-  exdir = "data/Sea Level Rise Maps (2050s 100-year Floodplain)"
-)
-floodplain100 <- st_read("data/Sea Level Rise Maps (2050s 100-year Floodplain)/geo_export_a34f512c-89ff-48cf-97c8-9bc470c59c2b.shp") %>%
-  st_transform(crs = 4326)
+```{r loan and clean 2020 census data}
 
-# Load NYC Stormwater Flood Map - Extreme Flood (Problem: which file?)
-unzip(
-  zipfile = "data/NYC Stormwater Flood Map - Extreme Flood.gdb-20220418T202948Z-001.zip",
-  exdir = "data"
-)
-stormwater <- st_read("data/NYC Stormwater Flood Map - Extreme Flood.gdb", layer = "NYC_Stormwater_Flood_Map_Extreme_Flood") %>% 
-  st_transform(crs = 4326)
-
-stormwater %>% 
-  names()
-
-stormwater %>% 
-  ggplot() +
-  geom_sf()
-
-# NFHL (The National Flood Hazard Layer) 
-unzip(
-  zipfile = "data/NFHL_36_20211216.zip",
-  exdir = "data/NFHL"
-)
-
-ogrListLayers("C:/Users/zheng/Desktop/670 DS/FinalProject/data/NFHL/NFHL_36_20211216.gdb")
-
-NFHL <- st_read("data/NFHL/NFHL_36_20211216.gdb", layer = "S_FLD_HAZ_AR") %>% 
-  st_transform(crs = 4326)
-
-geo <- tracts(
-  state = 36,
-  county = c(005, 047, 061, 081, 085),
-  cb = TRUE
-) %>%
-  st_transform(crs = 4326)
-
-NYC_boundary <- st_union(geo) %>% 
-  st_as_sf(crs = 4326)
-
-sf_use_s2(FALSE)
-NFHL_NYC <- st_filter(NFHL, NYC_boundary)
-
-NFHL_NYC %>% 
-  ggplot() +
-  geom_sf()
-
-# Load demographic data
+# (1) Load demographic data
 credential <- Sys.getenv("census_api_key")
 
-lookup_var <- load_variables(2020, "acs5")
+lookup_var <- load_variables(2020, "acs5", cache = TRUE)
+glimpse(lookup_var)
+
+race <- c(white = "B02001_002", #race
+          black = "B02001_003",
+          indian_alaska = "B02001_004",
+          asian = "B02001_005",
+          pacific = "B02001_006")
+
+education_attainment <- c(no_schooling = "B15003_002", #education_attainment
+                          elementary_school = "B15003_009",
+                          middle_school = "B15003_012",
+                          high_school = "B15003_017",
+                          bachelor = "B15003_022")
+
+employment_status <- c(employed = "B23025_004", # employment_status
+                       unemployed = "B23025_005",
+                       no_in_labor_force = "23025_007")
+
+sex_by_age <- c(total_by_age ="B01001_001",  #sex_by_age
+                male_by_age_total = "B01001_002",
+                female_by_age_total = "B01001_026")
 
 demogdata <- get_acs(
   geography = "tract",
   year = 2020,
-  variables = c(
-    white = "B02001_002", #race
-    black = "B02001_003",
-    indian_alaska = "B02001_004",
-    asian = "B02001_005",
-    pacific = "B02001_006",
+  variables = c(race,
+                education_attainment,
+                employment_status,
+                sex_by_age,
     hhincome = "B19013_001", # median household income
-    poverty = "B17020_002", # poverty level
-    no_schooling = "B15003_002", #education attainment
-    elementary_school = "B15003_009",
-    secondary_school = "B15003_012",
-    high_school = "B15003_017",
-    bachelor = "B15003_022",
-    employed = "B23025_004", # employment status
-    unemployed = "B23025_005",
-    no_in_labor_force = "23025_007"
-  ),
-  state =  36,
-  county = c(005, 047, 061, 081, 085),
-  key = credentia
-)
+    poverty = "B17020_002"), # poverty level
+    key = credential,
+    state = 36,
+    county = c(005, 047, 061, 081, 085))
 
+# (2) Tidy Demographic Data
+demo_clean <- demogdata %>%
+  select(-moe) %>%
+  #Writes all column names in lower_case
+  rename_all(~str_to_lower(.)) %>%
+  #Replaces the white space in column names with underscores
+  rename_all(~str_replace_all(., " ", "_")) %>%
+  separate(name, c("census_tract","county", "state"), sep = ", ")  %>%
+  select(-state) %>%
+  pivot_wider(names_from = variable,
+            values_from = estimate)
+
+# (3) Missing Data Imputation 
+
+# Decided to just impute with the mean-replacing NAs with income average per county
+mean_impute <- demo_clean %>%
+  select(geoid,county, hhincome) %>%
+  group_by(county) %>%
+  filter(!is.na(hhincome)) %>%
+  summarise(hhincome = mean(hhincome))
+mean_impute
+
+demo_clean <- demo_clean %>%
+  left_join(mean_impute, by = c("county")) %>%
+  mutate(hhincome = ifelse(is.na(hhincome.x), hhincome.y, hhincome.x)) %>%
+  select(-hhincome.y, -hhincome.x)
+view(demo_clean)
+
+# (4) Mutate more variables
+
+# Calculate the percentage of minorities
+demo_clean$rate_of_minorities <- round((demo_clean$black + demo_clean$asian + demo_clean$indian_alaska + demo_clean$pacific)/(demo_clean$white + demo_clean$black + demo_clean$asian + demo_clean$indian_alaska + demo_clean$pacific) * 100, 1) %>%
+  replace(., is.na(.), 0)
+
+# Calculate the employment rate
+demo_clean$employment_rate <- round((demo_clean$employed)/(demo_clean$employed + demo_clean$unemployed) * 100, 1) %>%
+  replace(., is.nan(.), 0)
+
+# (5) Add Geometry and Convert to sf Object
 geo <- tracts(
   state = 36,
   county = c(005, 047, 061, 081, 085),
   cb = TRUE
 ) %>%
+  st_transform(crs = 4326) %>% 
+  select(GEOID, geometry)
+
+demography_sf <- left_join(
+  x = demo_clean,
+  y = geo,
+  by = c("geoid" = "GEOID")) %>%
+  st_as_sf() %>%
+  st_transform(crs = 4326) %>%
+  mutate(geoid = as.numeric(geoid))
+
+```
+
+### 2. Load and Clean [Sea Level Rise Maps (2050s 500-year Floodplain)](https://data.cityofnewyork.us/Environment/Sea-Level-Rise-Maps-2050s-500-year-Floodplain-/qwca-zqw3)
+
+```{r load and clean floodplain Data}
+
+floodplain500 <- st_read("data/Sea Level Rise Maps (2050s 500-year Floodplain)/geo_export_e0ab4151-ea79-43e0-b860-b256c9a861bf.shp") %>%
   st_transform(crs = 4326)
 
 ```
 
-```{r Data cleaning}
+### 3. Set Up Models for the Floodplain Data
 
-# Tidy demogdata and change it into sf object
-demogdata_clean <- demogdata %>%
-  select(-moe) %>%
+```{r Set up the Trainign and Testing Data}
+
+# joins floodplain with census tract map and codes tracts by whether they are in floodplain
+sf_use_s2(FALSE)
+floodtracts <- st_join(geo,floodplain500, join = st_intersects, left = FALSE)
+flood_demography_sf <- demography_sf %>%
+  mutate(flood = ifelse(geoid %in% floodtracts$GEOID, 1, 0)) %>% 
+  na.omit() %>% 
+  mutate(flood = factor(flood))
+
+# splits data into training and testing groups (keep both sf and df objects because we need sf objects to plot both training data in EDA and testing data in assessment part, and we need data frame objects to model which do not deal with geometry information)
+
+set.seed(20220422)
+
+flood_split <- initial_split(flood_demography_sf, prop = 0.7, strata = "flood")
+flood_train_sf <- training(flood_split)
+flood_test_sf <- testing(flood_split)
+
+flood_train_df <- flood_train_sf %>% 
+  st_centroid() %>% 
+  mutate(lat = unlist(map(geometry, 1)), lon = unlist(map(geometry, 2))) %>% 
+  na.omit() %>% 
+  as_tibble() %>% 
+  select(-c(geometry, geoid, census_tract, county))
+
+flood_test_df <- flood_test_sf %>% 
+  st_centroid() %>% 
+  mutate(lat = unlist(map(geometry, 1)), lon = unlist(map(geometry, 2))) %>% 
+  na.omit() %>% 
+  as_tibble() %>% 
+  select(-geometry, geoid, census_tract, county)
+```
+
+```{r EDA of floodplain data}
+
+#Visualize the relationship between demographic data and flooding
+#Descriptive Analysis
+flood_train_sf  %>% 
+  summary()
+
+# Relationship Between Rate of Employment, Rate of Minorities and Poverty
+#P1 <-  flood_train_sf %>% 
+#  ggplot() + 
+#  geom_point(
+#    aes(x = employment_rate, y = rate_of_minorities, color = poverty),
+#    alpha = 0.4
+#    ) +  
+#  abline(
+#    lm(employment_rate ~ rate_of_minorities, data = #tibble(flood_train_sf)), 
+#    color="yellow"
+#    ) +
+#  labs(
+#    title = "Relationship Between Rate of Employment, Rate of Minorities and Poverty",
+#    subtitle = "Based on All Counties in New York City",
+#    caption = "Data source: 2019 1-year ACS, US Census Bureau",
+#    x = "Employment Rate",
+#    y = "Rate of Minorities"
+#    ) +
+#  theme_minimal()
+  
+  
+#ggplotly(plot1)
+
+# Correlation Test among white, male_by_age_total, hhincome, employment_rate 
+#P2 <- flood_train_df %>%
+# select(white, male_by_age_total, hhincome, employment_rate) %>%
+#  na.omit()
+#P2 <- round(cor(P2, method = "spearman"), 1)
+
+#Reject the null hypothesis at a 95% significance level that the incidence of poverty and an observation with no education is not correlated. This also shows a positive correlation of 0.44
+
+#Flooding Data 
+#Graph to show median household income in floodplain by county
+flood_train_sf_plot <- flood_train_sf %>%
+  group_by(geoid, county, census_tract) %>%
+  mutate(tooltip = paste(county, census_tract, rate_of_minorities, sep = ": "))
+P3 <- ggplot() + 
+  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = hhincome, 
+                      tooltip = tooltip, data_id = hhincome), size = 0.2) + 
+  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
+  scale_fill_distiller(palette = "Blues", direction = 1, labels = label_dollar()) + 
+  labs(title = "Median Household Income in New York City",
+       subtitle = "By Counties in New York City",
+       caption = "Data source: 2019 5-year ACS, US Census Bureau",
+       fill = "Household Income") +
+  facet_wrap(~county) +
+  theme_void()
+
+girafe(ggobj = P3) %>%
+  girafe_options(opts_hover(css = "fill:orange;"), 
+                 opts_zoom(max = 10))
+
+#Graph to show rate of minorities in floodplain by county
+flood_train_sf_plot <- flood_train_sf %>%
+  group_by(geoid, county, census_tract) %>%
+  mutate(tooltip = paste(county, census_tract, rate_of_minorities, sep = ": "))
+
+P4 <- ggplot() + 
+  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = rate_of_minorities, 
+                      tooltip = tooltip, data_id = rate_of_minorities), size = 0.2) + 
+  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5, show.legend = "point", lwd = 2) +
+  scale_fill_viridis_c() +
+#  scale_fill_distiller(palette = "Blues", direction = 1) + 
+  labs(title = "Rate of Minorities in New York City",
+       subtitle = "By Counties in New York City",
+       caption = "Data source: 2019 5-year ACS, US Census Bureau",
+       fill = "Rate of Minorities") +
+  facet_wrap(~county) +
+  theme_void()
+
+girafe(ggobj = P4) %>%
+  girafe_options(opts_hover(css = "fill:orange;"), 
+                 opts_zoom(max = 10))
+
+#Graph to show employment rate income in floodplain by county
+flood_train_sf_plot <- flood_train_sf %>%
+  group_by(geoid, county, census_tract) %>%
+  mutate(tooltip = paste(county, census_tract, employment_rate, sep = ": "))
+
+P5 <- ggplot() + 
+  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = employment_rate, 
+                      tooltip = tooltip, data_id = employment_rate), size = 0.2) + 
+  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
+  scale_fill_distiller(palette = "Blues", direction = 1) + 
+  labs(title = "Rate of Employment in New York City",
+       subtitle = "By Counties in New York City",
+       caption = "Data source: 2019 5-year ACS, US Census Bureau",
+       fill = "Rate of Employment") +
+  facet_wrap(~county) +
+  theme_void()
+
+girafe(ggobj = P5) %>%
+  girafe_options(opts_hover(css = "fill:orange;"), 
+                 opts_zoom(max = 10))
+
+#Graph to show poverty rate income in floodplain by county
+flood_train_sf_plot <- flood_train_sf %>%
+  group_by(geoid, county, census_tract) %>%
+  mutate(tooltip = paste(county, census_tract, poverty, sep = ": "))
+
+P6 <- ggplot() + 
+  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = poverty, 
+                      tooltip = tooltip, data_id = poverty), size = 0.2) + 
+  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
+  labs(title = " Poverty in New York City",
+       subtitle = "By Counties in New York City",
+       caption = "Data source: 2019 5-year ACS, US Census Bureau",
+       fill = "Poverty Levels") +
+  facet_wrap(~county) +
+  theme_void()
+
+girafe(ggobj = P6) %>%
+  girafe_options(opts_hover(css = "fill:orange;"), 
+                 opts_zoom(max = 10))
+
+map <- function(w,x,z){  
+  
+  flood_train_sf_plot <- flood_train_sf %>%
+  group_by(geoid, county, census_tract) %>%
+  mutate(tooltip = paste(county, census_tract, x, sep = ": "))
+  
+  P6 <- ggplot() + 
+  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = x, 
+                      tooltip = tooltip, data_id = x), size = 0.2) + 
+  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
+  labs(title = w,
+       subtitle = "By Counties in New York City",
+       caption = "Data source: 2019 5-year ACS, US Census Bureau",
+       fill = z) +
+    theme_void()
+
+girafe(ggobj = P6) %>%
+  girafe_options(opts_hover(css = "fill:orange;"), 
+                 opts_zoom(max = 10))
+}
+
+map("Poverty in New York City", "poverty", "Poverty Levels" )
+map("Rate of Employment in New York City", "employment_rate", "Rate of Employment" )
+map("Median Household Income in New York City", "hhincome", "Household Income" )
+map("Rate of Minorities in New York City", "rate_of_minorities", "Rate of Minorities" )
+
+```
+
+```{r Model the Floodplain Data}
+flood_rec <- 
+  recipe(flood ~ ., data = flood_train_df) %>%
+  # center and scale all predictors
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors())
+
+flood_folds <- vfold_cv(flood_train_df, v = 10, repeats = 1)
+
+# Decision Tree Model
+cart_mod <- decision_tree(tree_depth = tune()) %>%
+  set_engine(engine = "rpart") %>%
+  set_mode(mode = "classification")
+
+cart_grid <- grid_regular(tree_depth(), levels = 10)
+
+cart_wf <- workflow() %>%
+  add_recipe(flood_rec) %>%
+  add_model(cart_mod)
+
+cart_cv <- cart_wf %>%
+  tune_grid(
+    resamples = flood_folds,
+    grid = cart_grid,
+    metrics = metric_set(roc_auc)
+  )
+
+# plots decision tree
+# rpart.plot::rpart.plot(x = cart_fit$splits$fit$fit)
+
+
+# Logistic Model
+# run an initial logistic regression to get data for variable importance
+floodlogit <- glm(flood ~., data = flood_train_df, family = "binomial")
+
+# displays importance of 10 most important variables
+importances <- varImp(floodlogit)
+importances %>%
+  arrange(desc(Overall)) %>%
+  top_n(10)
+
+# According to https://stackoverflow.com/questions/47822694/logistic-regression-tuning-parameter-grid-in-r-caret-package/48218280#48218280, there is no tunning parameter for glm model.
+logistic_mod <- logistic_reg() %>%
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+logistic_wf <- workflow() %>%
+  add_model(logistic_mod) %>%
+  add_recipe(flood_rec)
+
+logistic_cv <- logistic_wf %>%
+  fit_resamples(
+    resample = flood_folds,
+    metrics = metric_set(roc_auc)
+    )
+
+
+
+
+# KNN Model
+flood_knn_mod <-
+  nearest_neighbor(neighbors = tune()) %>%
+  set_engine(engine = "kknn") %>%
+  set_mode(mode = "classification")
+
+knn_grid <- grid_regular(neighbors(), levels = 10)
+
+flood_knn_wf <- workflow() %>%
+  add_recipe(flood_rec) %>%
+  add_model(flood_knn_mod)
+
+flood_knn_cv <- flood_knn_wf %>%
+  tune_grid(
+    resample = flood_folds,
+    grid = knn_grid,
+    metrics = metric_set(roc_auc)
+    )
+```
+
+```{r Select the Best Model}
+
+cart_roc <- cart_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(cart_roc_auc = mean(.estimate))
+
+logistic_roc <- logistic_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(logistic_roc_auc = mean(.estimate))
+
+knn_roc <- flood_knn_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(knn_roc_auc = mean(.estimate))
+
+roc_auc <- bind_cols(
+  fold = cart_roc$id,
+  cart = cart_roc$cart_roc_auc,
+  logistic = logistic_roc$logistic_roc_auc,
+  knn = knn_roc$knn_roc_auc
+) %>%
+  pivot_longer(
+    cols = 2:4,
+    names_to = "model",
+    values_to = "roc_auc"
+  )
+
+P7 <- roc_auc %>% 
+  ggplot() +
+  geom_boxplot(
+    aes(x = model, y = roc_auc)
+  )
+
+T1 <- roc_auc %>% 
+  group_by(model) %>% 
+  summarise(
+    roc_auc = mean(roc_auc)
+  )
+
+P7 + gridExtra::tableGrob(T1)
+
+# Knn is the best model
+
+flood_knn_best <- flood_knn_cv %>%
+  select_best(metric = "roc_auc")
+
+flood_final_wf <- flood_knn_wf %>%
+  finalize_workflow(
+  parameters = flood_knn_best
+)
+
+flood_final_fit <- flood_final_wf %>%
+  fit(data = flood_train_df)
+
+```
+
+```{r assess floodplain prediction}
+
+flood_assess <- bind_cols(
+  flood_test_sf,
+  predict(object = flood_final_fit, new_data = flood_test_df, type = "class"),
+  predict(object = flood_final_fit, new_data = flood_test_df, type = "prob")
+) %>% 
+  mutate(
+    assessment = case_when(
+      flood == 1 & .pred_class == 1 ~ "true positive",
+      flood == 1 & .pred_class == 0 ~ "false negative",
+      flood == 0 & .pred_class == 1 ~ "false positive",
+      flood == 0 & .pred_class == 0 ~ "true negative"
+    )
+  )
+
+flood_assess %>% 
+  roc_curve(truth = flood, estimate = .pred_1) %>% 
+  ggplot(aes(x = 1 - specificity, y = sensitivity)) +
+           geom_path() +
+           geom_abline(lty = 3) +
+           coord_equal() +
+           theme_minimal()
+# The performance of the model is poor, less than randomly guessing.
+
+flood_assess %>% 
+  ggplot() +
+  geom_sf(aes(fill = assessment), color = "white")+
+  theme_void() +
+  labs(
+    title = "Assessment of the Finalized Knn Model",
+    fill = ""
+  )
+
+```
+
+## **Sandy Hurricane Damage**
+
+### 1. Load and clean 2012 census Data
+
+```{r Load and Clean 2012 Census Data}
+
+# (1) Load demographic data 2012
+credential <- Sys.getenv("census_api_key")
+
+lookup_var <- load_variables(2012, "acs5", cache = TRUE)
+
+demo2012 <- get_acs(
+  geography = "tract",
+  year = 2012,
+  variables = c(
+    race,
+    education_attainment,
+    employment_status,
+    sex_by_age,
+    hhincome = "B19013_001",
+    poverty = "C17002_001"),
+  state =  36,
+  key = credential
+)
+
+# (2) Tidy demographic data
+demo2012_clean <- demo2012 %>%
+  select(-moe, -NAME) %>%
+  rename(geoid = GEOID) %>% 
   pivot_wider(
     names_from = variable,
     values_from = estimate
   )
-# how to deal with missing value?
 
-geo <- geo %>%
-  select(GEOID, geometry)
+# (3) Mutate variables
+# The minorities rate
+demo2012_clean$rate_of_minorities <- round((demo2012_clean$black + demo2012_clean$asian + demo2012_clean$indian_alaska + demo2012_clean$pacific)/(demo2012_clean$white + demo2012_clean$black + demo2012_clean$asian + demo2012_clean$indian_alaska + demo2012_clean$pacific) * 100, 1) %>%
+  replace(., is.na(.), 0)
 
-demogdata_sf <- left_join(
-  x = demogdata_clean, 
-  y = geo
+# The employment rate
+demo2012_clean$employment_rate <- round((demo2012_clean$employed)/(demo2012_clean$employed + demo2012_clean$unemployed) * 100, 1) %>%
+  replace(., is.nan(.), 0)
+
+# (4) Convert into sf object
+
+# NOTE: As Sandy happened in 2012, we use 2010 geographic data instead of 2020 one.
+geo2010 <- tracts(
+  state = 36,
+  cb = TRUE,
+  year = 2010
+) %>%
+  st_transform(crs = 4326)
+
+geo2010 <- geo2010 %>% 
+  select(-STATE, -NAME, -LSAD, -CENSUSAREA, -COUNTYFP, -STATEFP) %>% 
+  clean_names() %>%
+  mutate(geoid = substr(geo_id, 10, 20)) %>% 
+  select(-geo_id)
+
+demo2012_sf <- left_join(
+  x = demo2012_clean, 
+  y = geo2010
 ) %>%
   st_as_sf() %>%
-  st_transform(crs = 4326) %>%
-  mutate(
-    GEOID = as.numeric(GEOID), #Label county name
-    county = case_when(
-      GEOID < 36047000000 ~ "Bronx",
-      GEOID < 36061000000 ~ "Kings",
-      GEOID < 36081000000 ~ "New_York",
-      GEOID < 36085000000 ~ "Queens",
-      TRUE ~ "Richmood"
-    )
-  )
-
-# label floodplain100 and floodplain500 with county name
-geo_county <- geo %>%
-  mutate(
-    GEOID = as.numeric(GEOID),
-    county = case_when(
-      GEOID < 36047000000 ~ "Bronx",
-      GEOID < 36061000000 ~ "Kings",
-      GEOID < 36081000000 ~ "New_York",
-      GEOID < 36085000000 ~ "Queens",
-      TRUE ~ "Richmood"
-    )
-  )
-
-sf_use_s2(FALSE)
-floodplain_county <- function(county_name){
-  
-   x <- st_union(filter(geo_county, county == county_name)) %>%
-    st_as_sf(crs = 4326)
-  
-   y1 <- st_filter(floodplain100, x)
-   y2 <- st_filter(floodplain500, x)
-   
-   assign(paste("floodplain100_", county_name, sep = ""), y1, envir = .GlobalEnv)
-   assign(paste("floodplain500_", county_name, sep = ""), y2, envir = .GlobalEnv)
-}
-
-map(.x = c("Bronx", "Kings", "New_York", "Queens", "Richmood"), .f = floodplain_county)
-
+  st_transform(crs = 4326)
 
 ```
 
+### 2. Load and Clean [Sandy Hurricany Damage Data](https://www.huduser.gov/maps/map_sandy_blockgroup.html) and [Inundation Data](https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5)
 
-```{r Maps}
-# test
-boundary_Bronx %>%
-  ggplot() +
-  geom_sf()
-Sandy %>%
-  ggplot() +
-  geom_sf()
+```{r Load and clean Sandy Hurricane data}
 
-# Plot NYC demographic data with floodplain100 and floodplain 500
-NYC_demo_floodplain <- function(demo_var){
-  
-  demo_NYU <- demogdata_sf %>%
-    rename("estimate" = demo_var)
-    
-  ggplot() + 
-  geom_sf(
-    data = demogdata_sf,
-    mapping = aes(fill = estimate), 
-    color = "white"
-  ) +
+# Flooding damage
+sandy_damage <- read_csv("data/Sandy_Damage_Estimates_by_Block_Group.csv") %>% 
+  select(GEOID, total_dmg) %>% 
+  clean_names() %>% 
+  filter(str_detect(geoid, "^36")) %>% 
+  mutate(geoid = substr(geoid, 1, 11)) %>% 
+  group_by(geoid) %>% 
+  mutate(total_dmg = sum(total_dmg)) %>% 
+  unique()
+
+# Sandy high water mark (hwm)
+sandy_hwm_p <- read_csv("data/FilteredHWMs.csv") %>% 
+  clean_names() %>% 
+  select(latitude, longitude, state_name, elev_ft) %>% 
+  filter(state_name == "NY") %>% 
+  select(-state_name) %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+sf_use_s2(FALSE)
+sandy_hwm_ct <- st_join(geo2010, sandy_hwm_p, join = st_contains) %>% 
+  filter(!is.na(elev_ft))
+
+sandy_dmg_hwm <- inner_join(sandy_hwm_ct, sandy_damage)
+
+sandy_modeling_data <- st_join(sandy_dmg_hwm, demo2012_sf, join = st_equals) %>% 
+  select(-county.y, -tract.y, -geoid.y) %>% 
+  rename(county = county.x, tract = tract.x, geoid = geoid.x) %>% 
+  na.omit()
+```
+
+## 3. Set Up Models for Sandy Hurricane Data
+
+```{r Set Up Training and Testing Data}
+
+set.seed(20220422)
+
+sandy_split <- initial_split(sandy_modeling_data, prop = 0.75)
+
+sandy_train_sf <- training(sandy_split)
+sandy_test_sf <- testing(sandy_split)
+
+sandy_train_df <- sandy_train_sf %>% 
+#  st_centroid() %>% 
+#  mutate(lat = unlist(map(geometry, 1)), lon = unlist(map(geometry, 2))) %>% 
+#  na.omit() %>% 
+  as_tibble() %>% 
+  select(-c(county, tract, geoid, geometry))
+
+sandy_test_df <- sandy_test_sf %>% 
+#  st_centroid() %>% 
+#  mutate(lat = unlist(map(geometry, 1)), lon = unlist(map(geometry, 2))) %>% 
+#  na.omit() %>% 
+  as_tibble() %>% 
+  select(-c(county, tract, geoid, geometry))
+```
+
+```{r EDA of Sandy Hurricane Data}
+
+P8 <- sandy_train_sf %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_dmg), color = "white") +
   scale_fill_gradient(
-    low = "#cfe8f3",
-    high = "#062635",
-    na.value = "grey50"
-  ) +
-  geom_sf(
-    data = floodplain500,
-    fill = "red",
-    color = "red",
-    alpha = 0.1
-  ) +
-  geom_sf(
-    data = floodplain100,
-    fill = "yellow",
-    color = "yellow",
-    alpha = 0.1
+    low = "yellow",
+    high = "red"
   )
- 
-  ggsave(str_glue("image/plot_", demo_var, ".png", seq = ""), width = 12, height = 8)
+
+P9 <- sandy_train_sf %>% 
+  ggplot() +
+  geom_sf(aes(fill = elev_ft), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  )
+
+P8 / P9
+# The elevation of water and the geometric information explains part of the total damage caused by Sandy hurricane.
+
+sandy_EDA <- function(demo_var){
+ P <- sandy_train_sf %>% 
+  mutate(
+    elevation = case_when(
+      elev_ft < 6.6 ~ "Min-Q1",
+      elev_ft < 8.95 ~ "Q1-Median",
+      elev_ft < 10.775 ~ "Median-Q3",
+      TRUE ~ "Q3-Max"
+    ) 
+  ) %>%
+  rename("estimate" = demo_var) %>% 
+  ggplot() +
+  geom_point(
+    aes(estimate, total_dmg, color = elevation, shape = elevation),
+    size = 3,
+    alpha =0.7
+  ) +
+   labs(
+     x = demo_var,
+     y = "total claim of damage"
+   )
   
+ assign(paste("P", demo_var, sep = "_"), P,  envir = .GlobalEnv)
 }
 
-map(.x = names(demogdata_sf)[3:16], .f = NYC_demo_floodplain)
+#wrap_plots(
+#  map(.x = c("rate_of_minorities", "bachelor", "hhincome", "employment_rate"), .f = sandy_EDA)
+#)
+#Holding the elevation of water at the constant level, the number of white in one census tract positively correlates to the total claims of damage.
+
+```
+
+```{r Modeling for the Sandy Hurricane Data}
+
+sandy_folds <- vfold_cv(sandy_train_df, v = 10, repeats = 1)
+
+sandy_rec <- recipe(total_dmg ~ ., data = sandy_train_df) %>%
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
 
 
-# Plot NYC demographic data by counties with floodplain100 and floodplain 500
-county_demo_floodplain <- function(county_name, demo_var){
+
+
+# Random Forest Model
+sandy_rf_mod <- rand_forest(mtry = tune(), trees = tune()) %>%
+  set_engine("randomForest") %>% 
+  set_mode("regression")
+
+rf_grid<- sandy_rf_mod %>% 
+  parameters() %>% 
+  finalize(sandy_train_df) %>% 
+  grid_latin_hypercube(size = 10)
+
+sandy_rf_wf <- workflow() %>% 
+  add_recipe(sandy_rec) %>% 
+  add_model(sandy_rf_mod)
   
-  demo_county <- demogdata_sf %>%
-    filter(county == county_name) %>%
-    rename("estimate" = demo_var)
-  
-  ggplot() + 
-  geom_sf(
-    data = demo_county,
-    mapping = aes(fill = estimate), 
-    color = "white"
-  ) +
-  scale_fill_gradient(
-    low = "#cfe8f3",
-    high = "#062635",
-    na.value = "white"
-  ) +
-  geom_sf(
-    data = get(paste("floodplain500", county_name, sep = "_")),
-    fill = "red",
-    color = "red",
-    alpha = 0.1
-  ) +
-  geom_sf(
-    data = get(paste("floodplain100", county_name, sep = "_")),
-    fill = "yellow",
-    color = "yellow",
-    alpha = 0.1
+sandy_rf_cv <- sandy_rf_wf %>% 
+  tune_grid(
+    resample = sandy_folds,
+    grid = rf_grid,
+    metrics = metric_set(rmse)
   )
-  
-  ggsave(str_glue("image/plot", county_name, demo_var, ".png", sep = "_"), width = 12, height = 8)
-  
-}
 
-map2(
-  .x = rep(c("Bronx", "Kings", "New_York", "Queens", "Richmood"), each = 14),
-  .y = rep(names(demogdata_sf)[3:16], times = 5),
-  .f = county_demo_floodplain
+
+
+
+## Elastic Net Model
+sandy_en_mod <- linear_reg(penalty = tune(), mixture = 0.5) %>%
+  set_engine("glmnet") %>% 
+  set_mode("regression")
+
+en_grid <- grid_regular(penalty(), levels = 10)
+
+sandy_en_wf <- workflow() %>% 
+  add_recipe(sandy_rec) %>% 
+  add_model(sandy_en_mod)
+  
+sandy_en_cv <- sandy_en_wf %>% 
+  tune_grid(
+    resample = sandy_folds,
+    grid = en_grid,
+    metrics = metric_set(rmse)
+  )
+
+
+
+
+## KNN Model
+sandy_knn_mod <- nearest_neighbor(neighbors = tune()) %>%
+  set_engine("kknn") %>% 
+  set_mode("regression")
+
+knn_grid <- grid_regular(neighbors(), levels = 10)
+
+sandy_knn_wf <- workflow() %>% 
+  add_recipe(sandy_rec) %>% 
+  add_model(sandy_knn_mod)
+  
+sandy_knn_cv <- sandy_knn_wf %>% 
+  tune_grid(
+    resample = sandy_folds,
+    grid = knn_grid,
+    metrics = metric_set(rmse)
+  )
+```
+
+```{r Select the Best Model for Sandy Hurricane Data}
+
+sandy_rf_rmse <- sandy_rf_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(sandy_rf_rmse = mean(.estimate))
+
+sandy_en_rmse <- sandy_en_cv %>%
+  collect_metrics(summarize = FALSE) %>%
+  group_by(id) %>%
+  summarise(sandy_en_rmse = mean(.estimate))
+
+sandy_knn_rmse <- sandy_knn_cv %>%
+  collect_metrics(summarize = FALSE) %>% 
+  group_by(id) %>%
+  summarise(sandy_knn_rmse = mean(.estimate))
+
+sandy_rmse <- bind_cols(
+  fold = sandy_rf_rmse$id,
+  sandy_rf = sandy_rf_rmse$sandy_rf_rmse,
+  sandy_en = sandy_en_rmse$sandy_en_rmse,
+  sandy_knn = sandy_knn_rmse$sandy_knn_rmse
+) %>%
+  pivot_longer(
+    cols = 2:4,
+    names_to = "model",
+    values_to = "rmse"
+  )
+
+P10 <- sandy_rmse %>% 
+  ggplot() +
+  geom_boxplot(
+    aes(x = model, y = rmse)
+  )
+
+T2 <- sandy_rmse %>% 
+  group_by(model) %>% 
+  summarise(
+    rmse = mean(rmse)
+  )
+
+P10 + gridExtra::tableGrob(T2)
+
+## Randome Forest is the best model among the three.
+
+sandy_rf_best <- sandy_rf_cv %>%
+  select_best(metric = "rmse")
+
+sandy_final_wf <- sandy_rf_wf %>%
+  finalize_workflow(
+  parameters = sandy_rf_best
 )
+
+sandy_final_fit <- sandy_final_wf %>%
+  fit(data = sandy_train_df)
+```
+
+```{r Assess the Random Forest Model with test data}
+
+sandy_prediction <- sandy_final_fit %>% 
+  predict(new_data = tibble(sandy_test_df))
+
+sandy_assess <- bind_cols(
+  sandy_test_sf,
+  predict_dmg = sandy_prediction$.pred
+) 
+
+tibble(sandy_assess) %>% 
+  rmse(truth = total_dmg, estimate = predict_dmg)
+
+tibble(sandy_assess) %>% 
+  select(total_dmg, predict_dmg) %>% 
+  pivot_longer(
+    cols = 1:2,
+    names_to = "true_prediction",
+    values_to = "dmg"
+  ) %>% 
+  ggplot() +
+  geom_density(aes(x = dmg, group = true_prediction, fill = true_prediction, color = true_prediction), alpha = 0.5) +
+  labs(x = "damage")
+
+sandy_assess %>% 
+  mutate(residual = total_dmg - predict_dmg) %>%
+  ggplot() +
+  geom_sf(aes(fill = residual), color = "white") +
+  scale_fill_gradient2(
+    low = "coral1",
+    mid = "turquoise3",
+    high = "coral1",
+    limits = c(-100,100),
+    guide = guide_colourbar(barheight = unit(4, "cm"))
+  ) +
+  theme_void()
 
 ```
