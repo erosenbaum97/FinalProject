@@ -9,87 +9,65 @@
 -----------------------------
 
 #### Project Title 
-
-
+Exploring the Impact of Flooding in New York City: The Demographics of the Flooplain Dweller in 2100
 
 ##### Summary & Motivating Question 
-This project is on environmental justice and climate change resilience. Our project focuses on New York City, a coastal city vulnerable to floods and hurricanes due to its extensively used waterfronts and coast. It is estimated that by 2050, 659,000 people in New York will be at risk to coastal flooding due to rising sea levels, and this risk is expected to rise in the future with worsening climate change. Using Geospatial Analysis, API Pulls and Supervised Machine Learning, we explore the impact of flooding on various areas in the state of New York. We explore the levels of impact experienced based on factors such as race, income, age, educational attainment, and population density to see if disparities exist. We also identify and predict the areas most prone to flooding, and potential damages based on population.
+This project is on environmental justice and climate change resilience. Our project focuses on New York City, a coastal city vulnerable to floods and hurricanes due to its extensively used waterfronts and coast. It is estimated that by 2050, 659,000 people in New York will be at risk to coastal flooding due to rising sea levels, and this risk is expected to rise in the future with worsening climate change. Using Geospatial Analysis, API Pulls and Supervised Machine Learning, we explore the impact of flooding on various areas in the state of New York. We explore the levels of impact experienced based on factors such as race, income, age, educational attainment, and population density to see if disparities exist. We also identify and predict the areas most prone to flooding, and potential damages based on population data 
 
 ##### The Project Goal: 
-The project is to provide insight into the staggering impact of climate change, provide insight and visibility into the needs of populations at risk, and help inform policy. Below we have listed our data sources, intended techniques, and anticipated technical hurdles. 
-
+The project of the project is to provide insight into the staggering impact of climate change, provide insight and visibility into the needs of populations at risk, and help inform policy.
 
 ##### Findings
-The model is poor because it using a training data frame to use the training and does not use cross validation and tuning 
-
-The model 
-The predicting 
-The demographic  data to see correlation with flood data 
-Asking the question, will 
-
-
-
+We find that the most important important factor with correlation to flooding is location. While this may seem intuitive, the  flooding can affects dwellers of specific geographic areas 
+* 518 census tracts out of the across the city of new york are at risk of flooding by 2100, while this is what the data projects. There is a likelihood the costs of impact will extend to other tracts larger since life in neighbouring and adjacent tracts will be disrupted as well  
+* Potential Increase in Economic Inequality: While the income distribution of people living in floodplains are spread across various income groups, low income dwellers will most burdened with flood prevention costs, relocation or evacuations costs. This could potentially widen the already existing income inequality in New York city 
+* High unemployment is best predictor of an area's flooding likelihood, so resilience projects should make sure to include those as stakeholders, since they might be at high risk
 
 ##### Recommendations
-
-
+* Cities should use them to model both flood damage and examine what kinds of communities live in flood-exposed areas. Ensuring that these communities are protected and have means to escape floods is vital.
 
 ##### Policy Implications 
 - [ ] To be able to access and understand populations at the most risk of losing property and livelihood due to natural disasters such as flooding and hurricanes 
-- [ ]  To inform policy on ways to anticipate, better target, and reduce the vulnerability of populations most at risk  
+- [ ] To inform policy on ways to anticipate, better target, and reduce the vulnerability of populations most at risk  
+
 
 ## Project Design 
 -----------------------------
 
 ##### Data Used 
-- [ ] [2050s 500-year Floodplain] (https://data.cityofnewyork.us)
-- [ ] [2050s 100-year Floodplain] (https://data.cityofnewyork.us)
-- [ ] [New York City Flood Hazard Mapper(ArcGIS)] (https://dcp.maps.arcgis.com)
-- [ ] [New York City Flood Hazard Mapper(ArcGIS)] (https://dcp.maps.arcgis.com)
-- [ ] [American Community Survey] (https://www.census.gov/programs-surveys/acs/about.html)
-- [ ] [ Sandy Inundation Zone] (https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5)
+- [ ] [2050s 500-year Floodplain](https://data.cityofnewyork.us)
+- [ ] [American Community Survey](https://www.census.gov/programs-surveys/acs/about.html)
+- [ ] [ Sandy Inundation Zone](https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5)
 - [ ] [Maps of Sandy Inundation Zone](https://www.huduser.gov/maps/map_sandy_blockgroup.html)
 
 ##### Data Techniques and Approaches:
-- [ ] Geospatial Analysis
-- [ ] API Pulls 
-- [ ] Supervised Machine Learning 
-
-##### Design Process:
+* Geospatial Analysis
+* API Pulls 
+* Supervised Machine Learning 
 
 ###### Technology Employed
 - [ ] R Programming Technology 
 
 
-###### Project Limitations: 
-We anticipated several potential technical hurdles that may arise during the development of this project. 
-
-
-
-
-
-
-
-
-
-
 ## Instructions for Replication
 -----------------------------
-* Create a data folder where all datasets will be kept 
-* Install all packages and run data as 
-
-
-
-## Bibliography
-
--------------------------------
-
+- [ ] Download the RStudio on project device 
+- [ ] Create a  subfolder in the repository folder named `data` where all datasets used for the project will be kept 
+- [ ]  Install all packages using the code:
+```
+install.packages "packagename"
+```
+- [ ] Load in Packages with the first code chunk in the `FinalProject.RMD` file
+- [ ] For the Census API pull, [sign up](https://api.census.gov/data/key_signup.html) for a unique key which will be store in a .txt file. The `.txt file` should be stored in the `data subfolder` as `credential`
+- [ ] Run the code for replication 
 
 ##### Description of files:
 A  brief description of the files/directories in the repository 
-* The README.md file provides a brief overview of project and its policy implications 
-* The FinalProject.Rmd file contains all code chunks for the project
-* The FinalProject.html file contains the knitted output of the project. 
-* The gitignore file contains all the data that was used for the project
+* The `README.md` file provides a brief overview of project and its policy implications 
+* The `FinalProject.Rmd` file contains all code chunks for the project
+* The `FinalProject.html file` contains the knitted code chunks  and results of the project. 
+* The `.gitignore file` contains all the data and env that was used for the project
+
+
 
 
