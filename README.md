@@ -72,7 +72,7 @@ We anticipated several potential technical hurdles that may arise during the dev
 -------------------------------
 
 
-## Description of files:
+##### Description of files:
 A  brief description of the files/directories in the repository 
 * The README.md file provides a brief overview of project and its policy implications 
 * The FinalProject.Rmd file contains all code chunks for the project
