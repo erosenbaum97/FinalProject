@@ -29,8 +29,6 @@ library(glmnet)
 library(ggiraph)
 library(scales)
 library(naniar)
-library(raster)
-library(tmap)
 library(plotly)
 library(gapminder)
 theme_set(theme_minimal())
@@ -40,7 +38,7 @@ theme_set(theme_minimal())
 
 ### 1. Load and Clean 2020 Census Data
 
-```{r loan and clean 2020 census data}
+```{r loan and clean 2020 census data, results = "hide"}
 
 # (1) Load demographic data
 credential <- Sys.getenv("census_api_key")
@@ -190,51 +188,59 @@ flood_train_sf  %>%
   summary()
 
 # Relationship Between Rate of Employment, Rate of Minorities and Poverty
-#P1 <-  flood_train_sf %>% 
-#  ggplot() + 
-#  geom_point(
-#    aes(x = employment_rate, y = rate_of_minorities, color = poverty),
-#    alpha = 0.4
-#    ) +  
-#  abline(
-#    lm(employment_rate ~ rate_of_minorities, data = #tibble(flood_train_sf)), 
-#    color="yellow"
-#    ) +
-#  labs(
-#    title = "Relationship Between Rate of Employment, Rate of Minorities and Poverty",
-#    subtitle = "Based on All Counties in New York City",
-#    caption = "Data source: 2019 1-year ACS, US Census Bureau",
-#    x = "Employment Rate",
-#    y = "Rate of Minorities"
-#    ) +
-#  theme_minimal()
-  
-  
-#ggplotly(plot1)
+# Relationship Between Rate of Employment, Rate of Minorities and Poverty
+flood_train_sf  %>% 
+ # select(c(-geometry, -Lat, -Lon))  %>% 
+  ggplot(aes(x=employment_rate, y=rate_of_minorities)) + 
+    geom_point(aes(color = poverty), alpha = 0.4) + 
+    labs(title = "Relationship Between Rate of Employment, Rate of Minorities and Poverty \nBased on All Counties in New York City",
+       subtitle = "No clear relationship found among the three variables",
+       caption = "Data source: 2019 1-year ACS, US Census Bureau",
+       x = "Employment Rate (%)",
+       y = "Rate of Minorities (%)",
+       color = "Poverty"
+       ) 
+  theme_minimal() 
 
+  
 # Correlation Test among white, male_by_age_total, hhincome, employment_rate 
-#P2 <- flood_train_df %>%
-# select(white, male_by_age_total, hhincome, employment_rate) %>%
-#  na.omit()
-#P2 <- round(cor(P2, method = "spearman"), 1)
+flood_train_df$flood1 <- as.numeric(flood_train_df$flood) - 1
+plot2 <- flood_train_df %>%
+   select(flood1, white, male_by_age_total, hhincome, employment_rate) %>%
+  na.omit()
+round(cor(plot2), 1)
 
-#Reject the null hypothesis at a 95% significance level that the incidence of poverty and an observation with no education is not correlated. This also shows a positive correlation of 0.44
+#Flooding Data on Map 
 
-#Flooding Data 
 #Graph to show median household income in floodplain by county
 flood_train_sf_plot <- flood_train_sf %>%
   group_by(geoid, county, census_tract) %>%
-  mutate(tooltip = paste(county, census_tract, rate_of_minorities, sep = ": "))
+  mutate(tooltip = paste(county, census_tract, hhincome, sep = ": "))
+
 P3 <- ggplot() + 
-  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = hhincome, 
-                      tooltip = tooltip, data_id = hhincome), size = 0.2) + 
-  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
-  scale_fill_distiller(palette = "Blues", direction = 1, labels = label_dollar()) + 
-  labs(title = "Median Household Income in New York City",
-       subtitle = "By Counties in New York City",
-       caption = "Data source: 2019 5-year ACS, US Census Bureau",
-       fill = "Household Income") +
-  facet_wrap(~county) +
+  geom_sf_interactive(
+    data = flood_train_sf_plot,
+    color = "white",
+    aes(fill = hhincome, tooltip = tooltip, data_id = hhincome),
+    size = 0.2, 
+    ) + 
+  geom_sf(
+    data = filter(flood_train_sf_plot, flood == 1), 
+    fill = "red", 
+    color = "red", 
+    alpha = 0.5
+    ) +
+  scale_fill_distiller(
+    palette = "Spectral", 
+    direction = 1, 
+    labels = label_dollar()
+    ) + 
+  labs(
+    title = "Median Household Income in New York City",
+    subtitle = "Flooding Impact by Household Income",
+    caption = "Data source: 2019 5-year ACS, US Census Bureau",
+    fill = "Household Income"
+    ) +
   theme_void()
 
 girafe(ggobj = P3) %>%
@@ -247,16 +253,26 @@ flood_train_sf_plot <- flood_train_sf %>%
   mutate(tooltip = paste(county, census_tract, rate_of_minorities, sep = ": "))
 
 P4 <- ggplot() + 
-  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = rate_of_minorities, 
-                      tooltip = tooltip, data_id = rate_of_minorities), size = 0.2) + 
-  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5, show.legend = "point", lwd = 2) +
+  geom_sf_interactive(
+    data = flood_train_sf_plot, 
+    color = "white", 
+    aes(fill = rate_of_minorities, tooltip = tooltip, data_id = rate_of_minorities), 
+    size = 0.5) + 
+  geom_sf(
+    data = filter(flood_train_sf, flood == 1), 
+    fill = "red", 
+    color = "red", 
+    alpha = 0.2, 
+    show.legend = "point", 
+    lwd = 2
+    ) +
   scale_fill_viridis_c() +
 #  scale_fill_distiller(palette = "Blues", direction = 1) + 
-  labs(title = "Rate of Minorities in New York City",
-       subtitle = "By Counties in New York City",
-       caption = "Data source: 2019 5-year ACS, US Census Bureau",
-       fill = "Rate of Minorities") +
-  facet_wrap(~county) +
+  labs(
+    title = "Rate of Minorities in New York City",
+    subtitle = "Flooding Impact by Rate of Minorities",
+    caption = "Data source: 2019 5-year ACS, US Census Bureau",
+    fill = "Rate of Minorities") +
   theme_void()
 
 girafe(ggobj = P4) %>%
@@ -269,15 +285,19 @@ flood_train_sf_plot <- flood_train_sf %>%
   mutate(tooltip = paste(county, census_tract, employment_rate, sep = ": "))
 
 P5 <- ggplot() + 
-  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = employment_rate, 
-                      tooltip = tooltip, data_id = employment_rate), size = 0.2) + 
-  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
+  geom_sf_interactive(
+    data = flood_train_sf_plot, 
+    color = "white", 
+    aes(fill = employment_rate, tooltip = tooltip, data_id = employment_rate), size = 0.2) + 
+  geom_sf(
+    data = filter(flood_train_sf, flood == 1), 
+    fill = "red", color = "red", alpha = 0.5) +
   scale_fill_distiller(palette = "Blues", direction = 1) + 
-  labs(title = "Rate of Employment in New York City",
-       subtitle = "By Counties in New York City",
-       caption = "Data source: 2019 5-year ACS, US Census Bureau",
-       fill = "Rate of Employment") +
-  facet_wrap(~county) +
+  labs(
+    title = "Rate of Employment in New York City",
+    subtitle = "Flooding Impact by Rate of Employment",
+    caption = "Data source: 2019 5-year ACS, US Census Bureau",
+    fill = "Rate of Employment") +
   theme_void()
 
 girafe(ggobj = P5) %>%
@@ -290,49 +310,30 @@ flood_train_sf_plot <- flood_train_sf %>%
   mutate(tooltip = paste(county, census_tract, poverty, sep = ": "))
 
 P6 <- ggplot() + 
-  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = poverty, 
-                      tooltip = tooltip, data_id = poverty), size = 0.2) + 
-  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
-  labs(title = " Poverty in New York City",
-       subtitle = "By Counties in New York City",
-       caption = "Data source: 2019 5-year ACS, US Census Bureau",
-       fill = "Poverty Levels") +
-  facet_wrap(~county) +
+  geom_sf_interactive(
+    data = flood_train_sf_plot, 
+    color = "white", 
+    aes(fill = poverty,tooltip = tooltip, data_id = poverty), size = 0.2) + 
+  geom_sf(
+    data = filter(flood_train_sf, flood == 1), 
+    fill = "red", 
+    color = "red", 
+    alpha = 0.5) +
+  labs(
+    title = " Poverty in New York City",
+    subtitle = "Flooding Impact by Incidences of Poverty",
+    caption = "Data source: 2019 5-year ACS, US Census Bureau",
+    fill = "Poverty Levels") +
   theme_void()
 
 girafe(ggobj = P6) %>%
   girafe_options(opts_hover(css = "fill:orange;"), 
                  opts_zoom(max = 10))
 
-map <- function(w,x,z){  
-  
-  flood_train_sf_plot <- flood_train_sf %>%
-  group_by(geoid, county, census_tract) %>%
-  mutate(tooltip = paste(county, census_tract, x, sep = ": "))
-  
-  P6 <- ggplot() + 
-  geom_sf_interactive(data = flood_train_sf_plot, color = "white", aes(fill = x, 
-                      tooltip = tooltip, data_id = x), size = 0.2) + 
-  geom_sf(data = filter(flood_train_sf, flood == 1), fill = "red", alpha = 0.5) +
-  labs(title = w,
-       subtitle = "By Counties in New York City",
-       caption = "Data source: 2019 5-year ACS, US Census Bureau",
-       fill = z) +
-    theme_void()
-
-girafe(ggobj = P6) %>%
-  girafe_options(opts_hover(css = "fill:orange;"), 
-                 opts_zoom(max = 10))
-}
-
-map("Poverty in New York City", "poverty", "Poverty Levels" )
-map("Rate of Employment in New York City", "employment_rate", "Rate of Employment" )
-map("Median Household Income in New York City", "hhincome", "Household Income" )
-map("Rate of Minorities in New York City", "rate_of_minorities", "Rate of Minorities" )
-
 ```
 
 ```{r Model the Floodplain Data}
+
 flood_rec <- 
   recipe(flood ~ ., data = flood_train_df) %>%
   # center and scale all predictors
@@ -358,9 +359,6 @@ cart_cv <- cart_wf %>%
     grid = cart_grid,
     metrics = metric_set(roc_auc)
   )
-
-# plots decision tree
-# rpart.plot::rpart.plot(x = cart_fit$splits$fit$fit)
 
 
 # Logistic Model
@@ -444,6 +442,11 @@ P7 <- roc_auc %>%
   ggplot() +
   geom_boxplot(
     aes(x = model, y = roc_auc)
+  ) +
+  labs(
+    title = "Compare the ROC_AUC across Decision Tree, Logistic, KNN",
+    subtitle = "Decision Tree has the highest ROC_AUC",
+    x = "Models"
   )
 
 T1 <- roc_auc %>% 
@@ -454,18 +457,20 @@ T1 <- roc_auc %>%
 
 P7 + gridExtra::tableGrob(T1)
 
-# Knn is the best model
+# CART is the best model
 
-flood_knn_best <- flood_knn_cv %>%
+flood_cart_best <- cart_cv %>%
   select_best(metric = "roc_auc")
 
-flood_final_wf <- flood_knn_wf %>%
+flood_final_wf <- cart_wf %>%
   finalize_workflow(
-  parameters = flood_knn_best
+  parameters = flood_cart_best
 )
 
 flood_final_fit <- flood_final_wf %>%
   fit(data = flood_train_df)
+
+rpart.plot::rpart.plot(x = flood_final_fit$fit$fit$fit)
 
 ```
 
@@ -485,23 +490,29 @@ flood_assess <- bind_cols(
     )
   )
 
-flood_assess %>% 
-  roc_curve(truth = flood, estimate = .pred_1) %>% 
+P_assess1 <- flood_assess %>% 
+  roc_curve(truth = flood, estimate = .pred_0) %>% 
   ggplot(aes(x = 1 - specificity, y = sensitivity)) +
            geom_path() +
            geom_abline(lty = 3) +
            coord_equal() +
            theme_minimal()
-# The performance of the model is poor, less than randomly guessing.
 
-flood_assess %>% 
+P_assess2 <- flood_assess %>% 
   ggplot() +
-  geom_sf(aes(fill = assessment), color = "white")+
+  geom_sf(aes(fill = assessment), color = "white", alpha = 0.7)+
   theme_void() +
   labs(
     title = "Assessment of the Finalized Knn Model",
+    subtitle = "True postive and true negative take large share of the total",
     fill = ""
   )
+
+P_assess1 + P_assess2
+
+flood_train_sf  %>% 
+  group_by(flood)%>% 
+  summarize(n = sum(total_by_age))
 
 ```
 
@@ -509,7 +520,7 @@ flood_assess %>%
 
 ### 1. Load and clean 2012 census Data
 
-```{r Load and Clean 2012 Census Data}
+```{r Load and Clean 2012 Census Data, results = "hide"}
 
 # (1) Load demographic data 2012
 credential <- Sys.getenv("census_api_key")
@@ -641,7 +652,14 @@ P8 <- sandy_train_sf %>%
   scale_fill_gradient(
     low = "yellow",
     high = "red"
-  )
+  ) +
+  labs(
+    title = "The Number of Damage Case Caused by Sandy Hurricane in New York State",
+    caption = "Sandy Damage Estimates by Block Group, U.S. Department of Housing and Urban Development",
+    fill = "Damage Case"
+  ) +
+  theme_void()
+
 
 P9 <- sandy_train_sf %>% 
   ggplot() +
@@ -649,40 +667,45 @@ P9 <- sandy_train_sf %>%
   scale_fill_gradient(
     low = "yellow",
     high = "red"
-  )
+  ) +
+  labs(
+    title = "The High Water Mark During the Sandy Hurricane in New York State",
+    caption = "USGS Flood Events Viewer (https://stn.wim.usgs.gov/fev/#Sandy)",
+    fill = "High Water Mark (Feet)"
+  ) +
+  theme_void()
 
 P8 / P9
 # The elevation of water and the geometric information explains part of the total damage caused by Sandy hurricane.
 
 sandy_EDA <- function(demo_var){
- P <- sandy_train_sf %>% 
-  mutate(
-    elevation = case_when(
-      elev_ft < 6.6 ~ "Min-Q1",
-      elev_ft < 8.95 ~ "Q1-Median",
-      elev_ft < 10.775 ~ "Median-Q3",
-      TRUE ~ "Q3-Max"
-    ) 
-  ) %>%
-  rename("estimate" = demo_var) %>% 
-  ggplot() +
-  geom_point(
-    aes(estimate, total_dmg, color = elevation, shape = elevation),
-    size = 3,
-    alpha =0.7
-  ) +
-   labs(
-     x = demo_var,
-     y = "total claim of damage"
-   )
   
- assign(paste("P", demo_var, sep = "_"), P,  envir = .GlobalEnv)
+  P <- sandy_train_sf %>%  
+    rename("estimate" = demo_var) %>% 
+  ggplot() +
+  geom_sf(aes(fill = estimate), color = "white") +
+  scale_fill_gradient(
+    low = "yellow",
+    high = "red"
+  ) +
+  labs(
+    title = paste("The Sandy Hurricane Hit Areas in New York State Differently by", demo_var, sep = " "),
+    caption = "Data source: 2012 5-year ACS, US Census Bureau",
+    fill = demo_var
+  ) +
+  theme_void()
+  
+  assign(paste("P", demo_var, sep = "_"), P,  envir = .GlobalEnv)
 }
 
-#wrap_plots(
-#  map(.x = c("rate_of_minorities", "bachelor", "hhincome", "employment_rate"), .f = sandy_EDA)
-#)
-#Holding the elevation of water at the constant level, the number of white in one census tract positively correlates to the total claims of damage.
+map(.x = c("rate_of_minorities", "bachelor", "hhincome", "employment_rate"), .f = sandy_EDA)
+
+P8 / P_bachelor
+P8 / P_employment_rate
+P8 / P_hhincome
+P8/ P_rate_of_minorities
+
+# According to the map, there is less obvious relationship between demographic attributes and the number of damage case caused by Sandy hurricane.
 
 ```
 
@@ -780,9 +803,9 @@ sandy_knn_rmse <- sandy_knn_cv %>%
 
 sandy_rmse <- bind_cols(
   fold = sandy_rf_rmse$id,
-  sandy_rf = sandy_rf_rmse$sandy_rf_rmse,
-  sandy_en = sandy_en_rmse$sandy_en_rmse,
-  sandy_knn = sandy_knn_rmse$sandy_knn_rmse
+  random_forest = sandy_rf_rmse$sandy_rf_rmse,
+  elastic_net = sandy_en_rmse$sandy_en_rmse,
+  knn = sandy_knn_rmse$sandy_knn_rmse
 ) %>%
   pivot_longer(
     cols = 2:4,
@@ -794,6 +817,11 @@ P10 <- sandy_rmse %>%
   ggplot() +
   geom_boxplot(
     aes(x = model, y = rmse)
+  ) +
+  labs(
+    title = "Compare the RMSE across Random Forest, Elastic Net, KNN",
+    subtitle = "Random Forest has the lowest rmse",
+    x = "Models"
   )
 
 T2 <- sandy_rmse %>% 
@@ -840,18 +868,29 @@ tibble(sandy_assess) %>%
   ) %>% 
   ggplot() +
   geom_density(aes(x = dmg, group = true_prediction, fill = true_prediction, color = true_prediction), alpha = 0.5) +
-  labs(x = "damage")
+  labs(
+    title = "The Distribution of True and Predicted Damage Case",
+    subtitle = "The model captures some features of the true distribution but fail to match well",
+    x = "Damage Case",
+    fill = "",
+    color = ""
+    )
 
 sandy_assess %>% 
   mutate(residual = total_dmg - predict_dmg) %>%
   ggplot() +
   geom_sf(aes(fill = residual), color = "white") +
   scale_fill_gradient2(
-    low = "coral1",
-    mid = "turquoise3",
-    high = "coral1",
-    limits = c(-100,100),
+    low = "red",
+    mid = "pink",
+    high = "red",
+    limits = c(-150, 150),
     guide = guide_colourbar(barheight = unit(4, "cm"))
+  ) +
+  labs(
+    title = "The Residual of The Randome Forest Model in Each Census Tract",
+    subtitle = "Put tracts with residuals lower than -100 and higher than 100 out of limites to show \nvariation of residuals more clearly",
+    fill = "Residual"
   ) +
   theme_void()
 
